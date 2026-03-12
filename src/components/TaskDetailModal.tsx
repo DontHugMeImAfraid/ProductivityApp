@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 
 export function TaskDetailModal() {
-  const { tasks, selectedTaskId, setSelectedTaskId, updateTask, deleteTask, workspace, settings } = useAppStore();
+  const { tasks, selectedTaskId, setSelectedTaskId, updateTask, deleteTask, workspace, settings, updateSettings } = useAppStore();
   
   const task = tasks.find(t => t.id === selectedTaskId);
   
@@ -26,6 +26,7 @@ export function TaskDetailModal() {
   const [effort, setEffort] = useState('');
   const [impact, setImpact] = useState('');
   const [addToCalendar, setAddToCalendar] = useState(false);
+  const [showDateError, setShowDateError] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -46,26 +47,16 @@ export function TaskDetailModal() {
 
   if (!task) return null;
 
-  const handleSave = () => {
-    // Validation
+  const executeSave = () => {
     const maxScale = settings.scaleSystem === '1-5' ? 5 : 10;
     const parsedEffort = effort ? Math.min(Math.max(parseInt(effort, 10), 1), maxScale) : undefined;
     const parsedImpact = impact ? Math.min(Math.max(parseInt(impact, 10), 1), maxScale) : undefined;
 
-    const today = format(new Date(), 'yyyy-MM-dd');
     let finalDueDate = dueDate;
     let finalStartDate = startDate;
 
-    if (!settings.allowBackDatingTasks) {
-      if (finalDueDate && finalDueDate < today) {
-        finalDueDate = today;
-      }
-      if (finalStartDate && finalStartDate < today) {
-        finalStartDate = today;
-      }
-      if (finalStartDate && finalDueDate && finalDueDate < finalStartDate) {
-        finalDueDate = finalStartDate;
-      }
+    if (finalStartDate && finalDueDate && finalDueDate < finalStartDate) {
+      finalDueDate = finalStartDate;
     }
 
     updateTask(task.id, {
@@ -82,7 +73,21 @@ export function TaskDetailModal() {
       impact: settings.enableImpact ? parsedImpact : undefined,
       addToCalendar,
     });
+    setShowDateError(false);
     setSelectedTaskId(null);
+  };
+
+  const handleSave = () => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    if (!settings.allowBackDatingTasks) {
+      if ((dueDate && dueDate < today) || (startDate && startDate < today)) {
+        setShowDateError(true);
+        return;
+      }
+    }
+
+    executeSave();
   };
 
   const handleDelete = () => {

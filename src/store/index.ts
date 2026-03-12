@@ -288,7 +288,7 @@ export const useAppStore = create<AppState>()(
       }),
       
       addNote: (note) => set((state) => ({
-        notes: [...state.notes, { ...note, id: uuidv4(), createdAt: Date.now(), updatedAt: Date.now() }]
+        notes: [...state.notes, { ...note, createdAt: Date.now(), updatedAt: Date.now() }]
       })),
       
       updateNote: (id, updates) => set((state) => ({
@@ -303,10 +303,14 @@ export const useAppStore = create<AppState>()(
         noteSections: [...state.noteSections, { ...section, id: uuidv4() }]
       })),
       
-      deleteNoteSection: (id) => set((state) => ({
-        noteSections: state.noteSections.filter((s) => s.id !== id),
-        notes: state.notes.map(n => n.sectionId === id ? { ...n, sectionId: undefined } : n)
-      })),
+      deleteNoteSection: (id) => set((state) => {
+        const noteIdsToDelete = new Set(state.notes.filter(n => n.sectionId === id).map(n => n.id));
+        return {
+          noteSections: state.noteSections.filter((s) => s.id !== id),
+          notes: state.notes.filter(n => !noteIdsToDelete.has(n.id)),
+          selectedNoteId: state.selectedNoteId && noteIdsToDelete.has(state.selectedNoteId) ? null : state.selectedNoteId,
+        };
+      }),
 
       addEvent: (event) => set((state) => ({
         events: [...state.events, { ...event, id: uuidv4() }]

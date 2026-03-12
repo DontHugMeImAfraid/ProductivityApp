@@ -99,7 +99,7 @@ export interface AppState {
   moveTask: (id: string, newStatus: Status) => void;
   reorderTasks: (startIndex: number, endIndex: number, status: Status) => void;
   
-  addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addNote: (note: Omit<Note, 'createdAt' | 'updatedAt'>) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   
