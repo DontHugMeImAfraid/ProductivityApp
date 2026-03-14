@@ -1,14 +1,36 @@
 export type Priority = 'Low' | 'Medium' | 'High' | 'Urgent';
-export type Status = 'Backlog' | 'To Do' | 'In Progress' | 'In Review' | 'Done';
+export type Status = 'To Do' | 'In Progress' | 'In Review' | 'Done';
 export type Workspace = 'Personal' | 'Work' | string;
 export type TaskType = 'Epic' | 'Story' | 'Task' | 'Bug';
 
 export interface Profile {
   id: string;
   name: string;
-  color: string;      // hex color e.g. "#6366f1"
-  icon: string;       // lucide icon name e.g. "Briefcase"
+  color: string;
+  icon: string;
   isDefault?: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  workspace: Workspace;
+  color: string; // hex color
+  isCompleted: boolean;
+  createdAt: number;
+  completedAt?: number;
+}
+
+export interface ProjectColumn {
+  id: string;
+  projectId: string;
+  status: Status;
+  label: string; // display name (can be renamed)
+  color: string; // hex
+  isHidden: boolean;
+  order: number;
+  width?: number; // px, for resizing
 }
 
 export interface Settings {
@@ -24,7 +46,7 @@ export interface Settings {
 
   // Calendar
   taskToCalendarAutomation: 'always' | 'prompt' | 'if-time' | 'never';
-  defaultTaskDuration: number; // minutes
+  defaultTaskDuration: number;
 
   // Notes / Markdown
   markdownRenderMode: 'always' | 'dynamic' | 'never';
@@ -35,23 +57,26 @@ export interface Settings {
   defaultLandingPage: 'dashboard' | 'calendar' | 'daily-note' | 'task-kanban';
   statusColors: Record<Status, string>;
 
+  // Dashboard task click behavior
+  dashboardTaskClickBehavior: 'auto-open' | 'highlight';
+
   // Productivity Behaviors
-  dailyResetTime: string;        // HH:MM e.g. "04:00"
-  celebrationEffects: boolean;   // confetti on task completion
+  dailyResetTime: string;
+  celebrationEffects: boolean;
   streakTracking: boolean;
-  nuclearMode: boolean;          // suppress all non-active-profile notifications
+  nuclearMode: boolean;
 
   // Privacy
-  cloakMode: boolean;            // blur sensitive content globally
+  cloakMode: boolean;
 
   // Notifications
-  reminderLeadTime: number;      // minutes before event
+  reminderLeadTime: number;
   morningDigest: boolean;
   eveningDigest: boolean;
 
   // Data & Security
   autoArchive: '1-day' | '7-days' | '30-days' | 'never';
-  trashRetention: number;        // days
+  trashRetention: number;
   biometricLock: boolean;
 }
 
@@ -62,10 +87,11 @@ export interface Task {
   status: Status;
   priority: Priority;
   workspace: Workspace;
+  projectId?: string; // links task to a project
   createdAt: number;
   startDate?: number;
   dueDate?: number;
-  time?: string;                 // HH:MM
+  time?: string;
   addToCalendar?: boolean;
   linkedNoteIds?: string[];
   effort?: number;
@@ -74,7 +100,7 @@ export interface Task {
   order?: number;
   parentId?: string;
   type?: TaskType;
-  recurringInterval?: number;    // days after completion (smart recursive)
+  recurringInterval?: number;
   streakCount?: number;
 }
 
@@ -106,7 +132,7 @@ export interface CalendarEvent {
   linkedNoteId?: string;
   linkedTaskId?: string;
   isRecurring?: boolean;
-  recurringDays?: number[];      // 0=Sun, 1=Mon...
+  recurringDays?: number[];
 }
 
 export interface AppState {
@@ -114,17 +140,21 @@ export interface AppState {
   currentView: string;
   selectedNoteId: string | null;
   selectedTaskId: string | null;
+  selectedProjectId: string | null;
   tasks: Task[];
   notes: Note[];
   noteSections: NoteSection[];
   events: CalendarEvent[];
   profiles: Profile[];
+  projects: Project[];
+  projectColumns: ProjectColumn[];
   settings: Settings;
 
   setWorkspace: (workspace: Workspace) => void;
   setCurrentView: (view: string) => void;
   setSelectedNoteId: (id: string | null) => void;
   setSelectedTaskId: (id: string | null) => void;
+  setSelectedProjectId: (id: string | null) => void;
 
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
@@ -146,6 +176,15 @@ export interface AppState {
   addProfile: (profile: Omit<Profile, 'id'>) => void;
   updateProfile: (id: string, updates: Partial<Profile>) => void;
   deleteProfile: (id: string) => void;
+
+  addProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
+  updateProject: (id: string, updates: Partial<Project>) => void;
+  deleteProject: (id: string) => void;
+
+  addProjectColumn: (col: Omit<ProjectColumn, 'id'>) => void;
+  updateProjectColumn: (id: string, updates: Partial<ProjectColumn>) => void;
+  deleteProjectColumn: (id: string) => void;
+  reorderProjectColumns: (projectId: string, fromIndex: number, toIndex: number) => void;
 
   updateSettings: (updates: Partial<Settings>) => void;
 }

@@ -1,7 +1,54 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { AppState, Status, Task, Note, Workspace, NoteSection, CalendarEvent, Profile, Settings } from '../types';
+import {
+  AppState, Status, Task, Note, Workspace,
+  NoteSection, CalendarEvent, Profile, Settings,
+  Project, ProjectColumn
+} from '../types';
+
+// ─── Default columns factory ─────────────────────────────────────────────────
+function makeDefaultColumns(projectId: string): ProjectColumn[] {
+  const defaults: Array<{ status: Status; color: string }> = [
+    { status: 'To Do',       color: '#6366f1' },
+    { status: 'In Progress', color: '#3b82f6' },
+    { status: 'In Review',   color: '#a855f7' },
+    { status: 'Done',        color: '#22c55e' },
+  ];
+  return defaults.map((d, i) => ({
+    id: uuidv4(),
+    projectId,
+    status: d.status,
+    label: d.status,
+    color: d.color,
+    isHidden: false,
+    order: i,
+  }));
+}
+
+// ─── Seed data ────────────────────────────────────────────────────────────────
+const seedProjectWork: Project = {
+  id: 'proj-work',
+  name: 'Work Inbox',
+  workspace: 'Work',
+  color: '#6366f1',
+  isCompleted: false,
+  createdAt: Date.now() - 86400000 * 7,
+};
+
+const seedProjectPersonal: Project = {
+  id: 'proj-personal',
+  name: 'Personal Goals',
+  workspace: 'Personal',
+  color: '#3b82f6',
+  isCompleted: false,
+  createdAt: Date.now() - 86400000 * 3,
+};
+
+const seedColumns: ProjectColumn[] = [
+  ...makeDefaultColumns('proj-work'),
+  ...makeDefaultColumns('proj-personal'),
+];
 
 const initialTasks: Task[] = [
   {
@@ -11,11 +58,12 @@ const initialTasks: Task[] = [
     status: 'To Do',
     priority: 'High',
     workspace: 'Work',
+    projectId: 'proj-work',
     createdAt: Date.now(),
     effort: 8,
     impact: 9,
     startDate: Date.now(),
-    dueDate: Date.now() + 86400000 * 3, // 3 days from now
+    dueDate: Date.now() + 86400000 * 3,
     order: 0,
   },
   {
@@ -25,6 +73,7 @@ const initialTasks: Task[] = [
     status: 'To Do',
     priority: 'Medium',
     workspace: 'Personal',
+    projectId: 'proj-personal',
     createdAt: Date.now(),
     effort: 2,
     impact: 5,
@@ -37,6 +86,7 @@ const initialTasks: Task[] = [
     status: 'In Progress',
     priority: 'High',
     workspace: 'Work',
+    projectId: 'proj-work',
     createdAt: Date.now(),
     effort: 4,
     impact: 7,
@@ -48,13 +98,14 @@ const initialTasks: Task[] = [
     id: '4',
     title: 'Update landing page copy',
     description: 'Revise the hero section to better reflect the new value proposition.',
-    status: 'Backlog',
+    status: 'To Do',
     priority: 'Medium',
     workspace: 'Work',
+    projectId: 'proj-work',
     createdAt: Date.now(),
     effort: 5,
     impact: 6,
-    order: 0,
+    order: 2,
   }
 ];
 
@@ -96,9 +147,9 @@ const initialEvents: CalendarEvent[] = [
 ];
 
 const initialProfiles: Profile[] = [
-  { id: '1', name: 'Work', color: 'bg-red-500', icon: 'Briefcase' },
-  { id: '2', name: 'Personal', color: 'bg-blue-500', icon: 'Home' },
-  { id: '3', name: 'Gym', color: 'bg-green-500', icon: 'Dumbbell' }
+  { id: '1', name: 'Work',     color: '#6366f1', icon: 'Briefcase' },
+  { id: '2', name: 'Personal', color: '#3b82f6', icon: 'Home' },
+  { id: '3', name: 'Gym',      color: '#22c55e', icon: 'Dumbbell' }
 ];
 
 const initialSettings: Settings = {
@@ -106,7 +157,7 @@ const initialSettings: Settings = {
   enablePriority: true,
   enableImpact: true,
   enableEffort: true,
-  scaleSystem: '1-5',
+  scaleSystem: '1-10',
   hideCompletedTasks: false,
   taskToCalendarAutomation: 'prompt',
   defaultTaskDuration: 30,
@@ -114,15 +165,27 @@ const initialSettings: Settings = {
   uiDensity: 'comfortable',
   sidebarBehavior: 'full',
   defaultLandingPage: 'task-kanban',
+  dashboardTaskClickBehavior: 'auto-open',
   statusColors: {
-    'Backlog': '#9ca3af', // zinc-400
-    'To Do': '#e4e4e7', // zinc-200
-    'In Progress': '#3b82f6', // blue-500
-    'In Review': '#a855f7', // purple-500
-    'Done': '#22c55e', // green-500
-  }
+    'To Do':       '#6366f1',
+    'In Progress': '#3b82f6',
+    'In Review':   '#a855f7',
+    'Done':        '#22c55e',
+  },
+  dailyResetTime: '04:00',
+  celebrationEffects: true,
+  streakTracking: false,
+  nuclearMode: false,
+  cloakMode: false,
+  reminderLeadTime: 15,
+  morningDigest: false,
+  eveningDigest: false,
+  autoArchive: 'never',
+  trashRetention: 30,
+  biometricLock: false,
 };
 
+// ─── Store ────────────────────────────────────────────────────────────────────
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
@@ -130,218 +193,190 @@ export const useAppStore = create<AppState>()(
       currentView: 'dashboard',
       selectedNoteId: null,
       selectedTaskId: null,
+      selectedProjectId: 'proj-work',
       tasks: initialTasks,
       notes: initialNotes,
       noteSections: initialNoteSections,
       events: initialEvents,
       profiles: initialProfiles,
+      projects: [seedProjectWork, seedProjectPersonal],
+      projectColumns: seedColumns,
       settings: initialSettings,
-      
+
       setWorkspace: (workspace) => set({ workspace }),
       setCurrentView: (currentView) => set({ currentView }),
       setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),
       setSelectedTaskId: (selectedTaskId) => set({ selectedTaskId }),
-      
+      setSelectedProjectId: (selectedProjectId) => set({ selectedProjectId }),
+
+      // ── Tasks ──────────────────────────────────────────────────────────────
       addTask: (task) => set((state) => {
-        const statusTasks = state.tasks.filter(t => t.status === task.status);
-        const maxOrder = statusTasks.length > 0 ? Math.max(...statusTasks.map(t => t.order || 0)) : -1;
-        
-        // Enforce effort and impact range
-        let sanitizedTask = { ...task };
-        const maxScale = state.settings.scaleSystem === '1-5' ? 5 : 10;
-        
-        if (sanitizedTask.effort !== undefined) {
-          sanitizedTask.effort = Math.min(Math.max(sanitizedTask.effort, 1), maxScale);
-        }
-        
-        if (sanitizedTask.impact !== undefined) {
-          sanitizedTask.impact = Math.min(Math.max(sanitizedTask.impact, 1), maxScale);
-        }
-
-        const newTask = { ...sanitizedTask, id: uuidv4(), createdAt: Date.now(), order: maxOrder + 1 };
-        
-        let newEvents = [...state.events];
-        if (newTask.addToCalendar) {
-          let startTime = newTask.dueDate ? new Date(newTask.dueDate) : new Date();
-          if (newTask.time) {
-            const [hours, minutes] = newTask.time.split(':').map(Number);
-            startTime.setHours(hours, minutes, 0, 0);
-          } else {
-            startTime.setHours(9, 0, 0, 0); // Default to 9 AM
-          }
-          const endTime = new Date(startTime.getTime() + (state.settings.defaultTaskDuration * 60000));
-          
-          newEvents.push({
-            id: uuidv4(),
-            title: newTask.title,
-            description: newTask.description,
-            startTime: startTime.getTime(),
-            endTime: endTime.getTime(),
-            workspace: newTask.workspace,
-            isPrivate: false,
-            linkedTaskId: newTask.id,
-          });
-        }
-
-        return {
-          tasks: [...state.tasks, newTask],
-          events: newEvents,
-        };
+        const statusTasks = state.tasks.filter(t => t.status === task.status && t.projectId === task.projectId);
+        const maxOrder = statusTasks.length > 0
+          ? Math.max(...statusTasks.map(t => t.order ?? 0)) + 1
+          : 0;
+        return { tasks: [...state.tasks, { ...task, id: uuidv4(), createdAt: Date.now(), order: maxOrder }] };
       }),
-      
-      updateTask: (id, updates) => set((state) => {
-        const existingTask = state.tasks.find(t => t.id === id);
-        
-        // Enforce effort and impact range
-        let sanitizedUpdates = { ...updates };
-        const maxScale = state.settings.scaleSystem === '1-5' ? 5 : 10;
-        
-        if (sanitizedUpdates.effort !== undefined) {
-          sanitizedUpdates.effort = Math.min(Math.max(sanitizedUpdates.effort, 1), maxScale);
-        }
-        
-        if (sanitizedUpdates.impact !== undefined) {
-          sanitizedUpdates.impact = Math.min(Math.max(sanitizedUpdates.impact, 1), maxScale);
-        }
 
-        const updatedTask = { ...existingTask, ...sanitizedUpdates } as Task;
-        
-        let newEvents = [...state.events];
-        
-        // Handle calendar sync
-        const existingEventIndex = newEvents.findIndex(e => e.linkedTaskId === id);
-        
-        if (updatedTask.addToCalendar) {
-          let startTime = updatedTask.dueDate ? new Date(updatedTask.dueDate) : new Date();
-          if (updatedTask.time) {
-            const [hours, minutes] = updatedTask.time.split(':').map(Number);
-            startTime.setHours(hours, minutes, 0, 0);
-          } else {
-            startTime.setHours(9, 0, 0, 0);
-          }
-          const endTime = new Date(startTime.getTime() + (state.settings.defaultTaskDuration * 60000));
-
-          if (existingEventIndex >= 0) {
-            // Update existing event
-            newEvents[existingEventIndex] = {
-              ...newEvents[existingEventIndex],
-              title: updatedTask.title,
-              description: updatedTask.description,
-              startTime: startTime.getTime(),
-              endTime: endTime.getTime(),
-              workspace: updatedTask.workspace,
-            };
-          } else {
-            // Create new event
-            newEvents.push({
-              id: uuidv4(),
-              title: updatedTask.title,
-              description: updatedTask.description,
-              startTime: startTime.getTime(),
-              endTime: endTime.getTime(),
-              workspace: updatedTask.workspace,
-              isPrivate: false,
-              linkedTaskId: updatedTask.id,
-            });
-          }
-        } else if (!updatedTask.addToCalendar && existingEventIndex >= 0) {
-          // Remove event if addToCalendar is turned off
-          newEvents.splice(existingEventIndex, 1);
-        }
-
-        return {
-          tasks: state.tasks.map((t) => t.id === id ? updatedTask : t),
-          events: newEvents,
-        };
-      }),
-      
-      deleteTask: (id) => set((state) => ({
-        tasks: state.tasks.filter((t) => t.id !== id),
-        events: state.events.filter((e) => e.linkedTaskId !== id)
+      updateTask: (id, updates) => set((state) => ({
+        tasks: state.tasks.map(t => t.id === id ? { ...t, ...updates } : t)
       })),
-      
-      moveTask: (id, newStatus) => set((state) => {
-        const task = state.tasks.find(t => t.id === id);
-        if (!task) return state;
-        
-        const statusTasks = state.tasks.filter(t => t.status === newStatus);
-        const maxOrder = statusTasks.length > 0 ? Math.max(...statusTasks.map(t => t.order || 0)) : -1;
-        
-        return {
-          tasks: state.tasks.map((t) => t.id === id ? { ...t, status: newStatus, order: maxOrder + 1 } : t)
-        };
-      }),
+
+      deleteTask: (id) => set((state) => ({
+        tasks: state.tasks.filter(t => t.id !== id),
+        notes: state.notes.map(n => ({
+          ...n,
+          linkedTaskIds: (n.linkedTaskIds || []).filter(tid => tid !== id)
+        }))
+      })),
+
+      moveTask: (id, newStatus) => set((state) => ({
+        tasks: state.tasks.map(t => {
+          if (t.id !== id) return t;
+          const statusTasks = state.tasks.filter(st => st.status === newStatus);
+          return { ...t, status: newStatus, order: statusTasks.length };
+        })
+      })),
 
       reorderTasks: (startIndex, endIndex, status) => set((state) => {
-        const statusTasks = state.tasks.filter(t => t.status === status).sort((a, b) => (a.order || 0) - (b.order || 0));
+        const statusTasks = [...state.tasks.filter(t => t.status === status)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         const [removed] = statusTasks.splice(startIndex, 1);
         statusTasks.splice(endIndex, 0, removed);
-        
-        const updatedTasks = statusTasks.map((t, index) => ({ ...t, order: index }));
-        
+        const reordered = statusTasks.map((t, i) => ({ ...t, order: i }));
         return {
           tasks: state.tasks.map(t => {
-            const updated = updatedTasks.find(ut => ut.id === t.id);
-            return updated ? updated : t;
+            const updated = reordered.find(r => r.id === t.id);
+            return updated ?? t;
           })
         };
       }),
-      
+
+      // ── Notes ──────────────────────────────────────────────────────────────
       addNote: (note) => set((state) => ({
-        notes: [...state.notes, { ...note, createdAt: Date.now(), updatedAt: Date.now() }]
+        notes: [...state.notes, { ...note, id: uuidv4(), createdAt: Date.now(), updatedAt: Date.now() }]
       })),
-      
+
       updateNote: (id, updates) => set((state) => ({
-        notes: state.notes.map((n) => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n)
+        notes: state.notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n)
       })),
-      
+
       deleteNote: (id) => set((state) => ({
-        notes: state.notes.filter((n) => n.id !== id)
+        notes: state.notes.filter(n => n.id !== id),
+        tasks: state.tasks.map(t => ({
+          ...t,
+          linkedNoteIds: (t.linkedNoteIds || []).filter(nid => nid !== id)
+        }))
       })),
-      
+
       addNoteSection: (section) => set((state) => ({
         noteSections: [...state.noteSections, { ...section, id: uuidv4() }]
       })),
-      
-      deleteNoteSection: (id) => set((state) => {
-        const noteIdsToDelete = new Set(state.notes.filter(n => n.sectionId === id).map(n => n.id));
-        return {
-          noteSections: state.noteSections.filter((s) => s.id !== id),
-          notes: state.notes.filter(n => !noteIdsToDelete.has(n.id)),
-          selectedNoteId: state.selectedNoteId && noteIdsToDelete.has(state.selectedNoteId) ? null : state.selectedNoteId,
-        };
-      }),
 
+      deleteNoteSection: (id) => set((state) => ({
+        noteSections: state.noteSections.filter(s => s.id !== id)
+      })),
+
+      // ── Events ─────────────────────────────────────────────────────────────
       addEvent: (event) => set((state) => ({
         events: [...state.events, { ...event, id: uuidv4() }]
       })),
 
       updateEvent: (id, updates) => set((state) => ({
-        events: state.events.map((e) => e.id === id ? { ...e, ...updates } : e)
+        events: state.events.map(e => e.id === id ? { ...e, ...updates } : e)
       })),
 
       deleteEvent: (id) => set((state) => ({
-        events: state.events.filter((e) => e.id !== id)
+        events: state.events.filter(e => e.id !== id)
       })),
 
+      // ── Profiles ───────────────────────────────────────────────────────────
       addProfile: (profile) => set((state) => ({
         profiles: [...state.profiles, { ...profile, id: uuidv4() }]
       })),
 
       updateProfile: (id, updates) => set((state) => ({
-        profiles: state.profiles.map((p) => p.id === id ? { ...p, ...updates } : p)
+        profiles: state.profiles.map(p => p.id === id ? { ...p, ...updates } : p)
       })),
 
       deleteProfile: (id) => set((state) => ({
-        profiles: state.profiles.filter((p) => p.id !== id)
+        profiles: state.profiles.filter(p => p.id !== id)
       })),
 
+      // ── Projects ───────────────────────────────────────────────────────────
+      addProject: (project) => set((state) => {
+        const id = uuidv4();
+        const newProject: Project = { ...project, id, createdAt: Date.now() };
+        const cols = makeDefaultColumns(id);
+        return {
+          projects: [...state.projects, newProject],
+          projectColumns: [...state.projectColumns, ...cols],
+          selectedProjectId: id,
+        };
+      }),
+
+      updateProject: (id, updates) => set((state) => ({
+        projects: state.projects.map(p => p.id === id ? { ...p, ...updates } : p)
+      })),
+
+      deleteProject: (id) => set((state) => ({
+        projects: state.projects.filter(p => p.id !== id),
+        projectColumns: state.projectColumns.filter(c => c.projectId !== id),
+        tasks: state.tasks.map(t => t.projectId === id ? { ...t, projectId: undefined } : t),
+        selectedProjectId: state.selectedProjectId === id
+          ? (state.projects.find(p => p.id !== id)?.id ?? null)
+          : state.selectedProjectId,
+      })),
+
+      // ── ProjectColumns ─────────────────────────────────────────────────────
+      addProjectColumn: (col) => set((state) => ({
+        projectColumns: [...state.projectColumns, { ...col, id: uuidv4() }]
+      })),
+
+      updateProjectColumn: (id, updates) => set((state) => ({
+        projectColumns: state.projectColumns.map(c => c.id === id ? { ...c, ...updates } : c)
+      })),
+
+      deleteProjectColumn: (id) => set((state) => ({
+        projectColumns: state.projectColumns.filter(c => c.id !== id)
+      })),
+
+      reorderProjectColumns: (projectId, fromIndex, toIndex) => set((state) => {
+        const cols = [...state.projectColumns.filter(c => c.projectId === projectId)]
+          .sort((a, b) => a.order - b.order);
+        const [moved] = cols.splice(fromIndex, 1);
+        cols.splice(toIndex, 0, moved);
+        const updated = cols.map((c, i) => ({ ...c, order: i }));
+        return {
+          projectColumns: state.projectColumns.map(c => {
+            const u = updated.find(u => u.id === c.id);
+            return u ?? c;
+          })
+        };
+      }),
+
+      // ── Settings ───────────────────────────────────────────────────────────
       updateSettings: (updates) => set((state) => ({
         settings: { ...state.settings, ...updates }
       })),
     }),
     {
-      name: 'nexus-storage',
+      name: 'nexus-store',
+      // Migrate old stored data to add new fields
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          persistedState.projects = persistedState.projects ?? [seedProjectWork, seedProjectPersonal];
+          persistedState.projectColumns = persistedState.projectColumns ?? seedColumns;
+          persistedState.selectedProjectId = persistedState.selectedProjectId ?? 'proj-work';
+          persistedState.settings = {
+            ...initialSettings,
+            ...(persistedState.settings ?? {}),
+            dashboardTaskClickBehavior:
+              persistedState.settings?.dashboardTaskClickBehavior ?? 'auto-open',
+          };
+        }
+        return persistedState;
+      },
     }
   )
 );

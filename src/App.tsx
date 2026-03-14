@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
@@ -14,9 +14,10 @@ import { useAppStore } from './store';
 export default function App() {
   const { currentView, setCurrentView, setSelectedNoteId } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [prevView, setPrevView] = useState(currentView);
+  const [transitioning, setTransitioning] = useState(false);
+  const [displayView, setDisplayView] = useState(currentView);
 
-  // Handle "Open in New Tab" from Notes context menu.
-  // When a new tab opens, sessionStorage carries the note ID; we navigate to it.
   useEffect(() => {
     const openNoteId = sessionStorage.getItem('nexus_open_note');
     if (openNoteId) {
@@ -24,26 +25,31 @@ export default function App() {
       setCurrentView('notes');
       setSelectedNoteId(openNoteId);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Page transition: fade+slide between views
+  useEffect(() => {
+    if (currentView === displayView) return;
+    setTransitioning(true);
+    const t = setTimeout(() => {
+      setDisplayView(currentView);
+      setTransitioning(false);
+    }, 180);
+    return () => clearTimeout(t);
+  }, [currentView]);
 
   const renderView = () => {
-    switch (currentView) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'tasks':
-        return <Tasks />;
-      case 'notes':
-        return <Notes />;
-      case 'ai':
-        return <AIAssistant />;
-      case 'calendar':
-        return <CalendarView />;
-      case 'settings':
-        return <Settings />;
+    switch (displayView) {
+      case 'dashboard': return <Dashboard />;
+      case 'tasks':     return <Tasks />;
+      case 'notes':     return <Notes />;
+      case 'ai':        return <AIAssistant />;
+      case 'calendar':  return <CalendarView />;
+      case 'settings':  return <Settings />;
       default:
         return (
-          <div className="flex-1 flex items-center justify-center flex-col gap-4 text-zinc-500 p-4 text-center">
-            <h2 className="text-2xl font-semibold text-zinc-900">Coming Soon</h2>
+          <div className="flex-1 flex items-center justify-center flex-col gap-4 text-slate-500 p-4 text-center">
+            <h2 className="text-2xl font-semibold text-slate-900">Coming Soon</h2>
             <p>This section is under development.</p>
           </div>
         );
@@ -51,7 +57,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-white text-zinc-950 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50 text-slate-950 font-sans overflow-hidden">
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
         <div
@@ -62,11 +68,11 @@ export default function App() {
 
       {/* Sidebar */}
       <div className={cn(
-        'fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0',
+        'fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0',
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <Sidebar
-          currentView={currentView}
+          currentView={displayView}
           setCurrentView={(v) => {
             setCurrentView(v);
             setIsMobileMenuOpen(false);
@@ -74,24 +80,37 @@ export default function App() {
         />
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile Header */}
-        <div className="md:hidden flex items-center justify-between p-4 border-b border-zinc-200 bg-white shrink-0">
-          <div className="flex items-center gap-2 font-bold text-lg text-zinc-900">
-            <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-zinc-50" />
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center justify-between p-4 border-b border-slate-200 bg-white">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+          <div className="flex items-center gap-2 font-bold text-lg tracking-tight text-slate-900">
+            <div className="w-7 h-7 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
             </div>
             Nexus
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)}>
-            <Menu className="w-5 h-5" />
-          </Button>
+          <div className="w-9" />
         </div>
 
-        <main className="flex-1 overflow-y-auto">
+        {/* Page with transition */}
+        <div
+          className={cn(
+            'flex-1 overflow-auto transition-all duration-200 ease-in-out',
+            transitioning
+              ? 'opacity-0 translate-y-1'
+              : 'opacity-100 translate-y-0'
+          )}
+        >
           {renderView()}
-        </main>
+        </div>
       </div>
     </div>
   );
