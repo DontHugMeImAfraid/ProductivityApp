@@ -1,12 +1,5 @@
 /**
  * TaskCard.tsx
- * Drop-in replacement for the inline task card in Tasks.tsx (board view).
- * 
- * Adds:
- *  - Subtask progress pill  ████░░░░  40%
- *  - Streak counter badge   🔥 12
- *  - Status-colored top border from settings.statusColors
- *  - Overdue indicator
  */
 
 import React from 'react';
@@ -72,10 +65,16 @@ export function TaskCard({ task, isDragging, isSelected, onClick }: TaskCardProp
   return (
     <Card
       className={cn(
-        "shadow-sm cursor-pointer hover:shadow-md transition-all duration-150 border-zinc-200/80 overflow-hidden",
-        isDragging ? 'shadow-lg ring-1 ring-indigo-300 rotate-1' : '',
-        isSelected ? 'ring-2 ring-indigo-500' : '',
-        isOverdue ? 'border-red-200' : ''
+        // Base — no transition-all so it doesn't fight dnd's transform
+        "cursor-pointer border-zinc-200/80 overflow-hidden",
+        // Idle hover: subtle lift
+        !isDragging && "shadow-sm hover:shadow-md hover:-translate-y-px transition-[box-shadow,transform] duration-150",
+        // Dragging: clear lift, violet ring, no rotation
+        isDragging && "shadow-2xl ring-2 ring-violet-400 ring-offset-1 bg-white",
+        // Selected
+        isSelected && !isDragging && "ring-2 ring-indigo-500",
+        // Overdue
+        isOverdue && "border-red-200",
       )}
       onClick={onClick}
     >

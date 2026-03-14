@@ -253,7 +253,7 @@ export const useAppStore = create<AppState>()(
 
       // ── Notes ──────────────────────────────────────────────────────────────
       addNote: (note) => set((state) => ({
-        notes: [...state.notes, { ...note, id: uuidv4(), createdAt: Date.now(), updatedAt: Date.now() }]
+        notes: [...state.notes, { ...note, id: (note as any).id ?? uuidv4(), createdAt: Date.now(), updatedAt: Date.now() }]
       })),
 
       updateNote: (id, updates) => set((state) => ({

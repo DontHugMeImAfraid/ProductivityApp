@@ -41,6 +41,7 @@ function StatusTasksModal({
 }: {
   status: Status;
   tasks: Task[];
+  
   onClose: () => void;
   onTaskClick: (task: Task) => void;
 }) {

@@ -29,7 +29,7 @@ export function Tasks() {
     reorderProjectColumns, addProjectColumn
   } = useAppStore();
 
-  const [isAddingTask, setIsAddingTask] = useState<string | null>(null); // column id
+  const [isAddingTask, setIsAddingTask] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('Medium');
   const [newTaskTime, setNewTaskTime] = useState('');
@@ -44,7 +44,6 @@ export function Tasks() {
   const currentProject = projects.find(p => p.id === selectedProjectId);
   const workspaceProjects = projects.filter(p => p.workspace === workspace);
 
-  // Columns for current project, sorted, not hidden
   const allCols = projectColumns
     .filter(c => c.projectId === selectedProjectId)
     .sort((a, b) => a.order - b.order);
@@ -63,7 +62,6 @@ export function Tasks() {
     if (!destination) return;
 
     if (type === 'column') {
-      // Reorder columns
       reorderProjectColumns(selectedProjectId!, source.index, destination.index);
       return;
     }
@@ -106,7 +104,7 @@ export function Tasks() {
     if (!newColLabel.trim() || !selectedProjectId) return;
     addProjectColumn({
       projectId: selectedProjectId,
-      status: 'To Do', // default
+      status: 'To Do',
       label: newColLabel.trim(),
       color: '#6366f1',
       isHidden: false,
@@ -148,8 +146,12 @@ export function Tasks() {
                       ref={colProvided.innerRef}
                       {...colProvided.draggableProps}
                       className={cn(
-                        "flex flex-col gap-2 rounded-2xl p-3 min-w-[280px] max-w-[320px] flex-shrink-0 transition-all duration-200 group/col",
-                        colSnapshot.isDragging ? "shadow-2xl rotate-1 opacity-90" : "bg-slate-100/60"
+                        // Base column styles — no transition-all so dnd transform isn't interrupted
+                        "flex flex-col gap-2 rounded-2xl p-3 min-w-[280px] max-w-[320px] flex-shrink-0 group/col",
+                        // Idle
+                        !colSnapshot.isDragging && "bg-slate-100/60",
+                        // Dragging column: clean lift, no rotation
+                        colSnapshot.isDragging && "bg-white shadow-2xl ring-1 ring-slate-200",
                       )}
                       style={{
                         ...colProvided.draggableProps.style,
@@ -161,7 +163,7 @@ export function Tasks() {
                         <div className="flex items-center gap-2">
                           <div
                             {...colProvided.dragHandleProps}
-                            className="cursor-grab opacity-0 group-hover/col:opacity-40 hover:!opacity-70 transition-opacity"
+                            className="cursor-grab active:cursor-grabbing opacity-0 group-hover/col:opacity-40 hover:!opacity-70 transition-opacity"
                           >
                             <GripVertical className="w-3.5 h-3.5 text-slate-500" />
                           </div>
@@ -174,15 +176,20 @@ export function Tasks() {
                         </div>
                       </div>
 
-                      {/* Task list */}
+                      {/* Task drop zone */}
                       <Droppable droppableId={col.status} type="task">
                         {(taskProvided, taskSnapshot) => (
                           <div
                             ref={taskProvided.innerRef}
                             {...taskProvided.droppableProps}
                             className={cn(
-                              "flex flex-col gap-2 flex-1 min-h-[80px] rounded-xl p-1 transition-colors",
-                              taskSnapshot.isDraggingOver ? "bg-violet-50/60" : ""
+                              "flex flex-col gap-2 flex-1 min-h-[80px] rounded-xl p-1",
+                              // Smooth background transition only (not transform)
+                              "transition-colors duration-150",
+                              // Drop-zone active: soft violet tint + border
+                              taskSnapshot.isDraggingOver
+                                ? "bg-violet-50 ring-2 ring-violet-200 ring-inset"
+                                : "bg-transparent",
                             )}
                           >
                             {colTasks.map((task, i) => (
@@ -192,7 +199,8 @@ export function Tasks() {
                                     ref={taskDrag.innerRef}
                                     {...taskDrag.draggableProps}
                                     {...taskDrag.dragHandleProps}
-                                    style={{ ...taskDrag.draggableProps.style }}
+                                    // Only pass dnd's own transform/transition — nothing else
+                                    style={taskDrag.draggableProps.style}
                                   >
                                     <TaskCard
                                       task={task}
@@ -229,7 +237,9 @@ export function Tasks() {
                                           onClick={() => setNewTaskPriority(p)}
                                           className={cn(
                                             "px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all",
-                                            newTaskPriority === p ? getPriorityColor(p) : "border-slate-200 text-slate-400"
+                                            newTaskPriority === p
+                                              ? getPriorityColor(p)
+                                              : "border-slate-200 text-slate-400"
                                           )}
                                         >
                                           {p}
@@ -261,7 +271,7 @@ export function Tasks() {
             })}
             {provided.placeholder}
 
-            {/* Hidden section chips */}
+            {/* Hidden column chips */}
             {hiddenCols.map(col => (
               <button
                 key={col.id}
@@ -373,7 +383,6 @@ export function Tasks() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          {/* Project switcher button */}
           <button
             onClick={() => setShowProjectPanel(v => !v)}
             className="flex items-center gap-2.5 px-3 py-2 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all group"
@@ -396,9 +405,9 @@ export function Tasks() {
         <div className="flex items-center gap-2">
           <div className="flex bg-slate-100 p-1 rounded-xl">
             {([
-              { id: 'board', icon: LayoutGrid, title: 'Board' },
-              { id: 'list',  icon: List,       title: 'List'  },
-              { id: 'backlog', icon: Layers,   title: 'Backlog' },
+              { id: 'board',   icon: LayoutGrid, title: 'Board'   },
+              { id: 'list',    icon: List,        title: 'List'    },
+              { id: 'backlog', icon: Layers,      title: 'Backlog' },
             ] as const).map(({ id, icon: Icon, title }) => (
               <Button
                 key={id}
@@ -427,8 +436,8 @@ export function Tasks() {
 
       {/* Views */}
       <div className="flex-1 overflow-hidden">
-        {currentTaskView === 'board' && renderBoardView()}
-        {currentTaskView === 'list' && renderListView()}
+        {currentTaskView === 'board'   && renderBoardView()}
+        {currentTaskView === 'list'    && renderListView()}
         {currentTaskView === 'backlog' && renderBacklogView()}
       </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { v4 as uuidv4 } from 'uuid';
 import { useAppStore } from '@/store';
 import { Note, NoteSection } from '@/types';
 import {
@@ -130,10 +131,11 @@ export function Notes() {
     [workspaceNotes]
   );
 
+  // FIX: generate id once here and pass it into addNote so both sides agree
   const handleCreateNote = (sectionId?: string) => {
     const uniqueName = getUniqueName('Untitled Note', sectionId);
-    const id = crypto.randomUUID();
-    addNote({ title: uniqueName, content: '', workspace, linkedTaskIds: [], sectionId });
+    const id = uuidv4();
+    addNote({ id, title: uniqueName, content: '', workspace, linkedTaskIds: [], sectionId } as any);
     setSelectedNoteId(id);
     setIsEditing(true);
     setRenamingNoteId(id);
@@ -254,11 +256,14 @@ export function Notes() {
           setContextMenu({ x: e.clientX, y: e.clientY, note });
         }}
         className={cn(
-          "group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-150 select-none",
-          isSelected
+          "group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer select-none",
+          // Only transition colors/shadow, never transform (conflicts with dnd)
+          "transition-[background-color,box-shadow] duration-150",
+          isSelected && !snapshot?.isDragging
             ? "bg-violet-50 text-violet-700"
             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-          snapshot?.isDragging && "shadow-lg rotate-1 bg-white opacity-90"
+          // Clean lift when dragging — no rotation, no opacity change
+          snapshot?.isDragging && "bg-white shadow-lg ring-2 ring-violet-400 ring-offset-1 text-violet-700"
         )}
       >
         <FileText className={cn("w-3.5 h-3.5 shrink-0", isSelected ? "text-violet-500" : "text-slate-400")} />
@@ -368,8 +373,17 @@ export function Notes() {
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {/* Unsectioned */}
             <Droppable droppableId="__none__">
-              {(drop) => (
-                <div ref={drop.innerRef} {...drop.droppableProps} className="space-y-0.5 min-h-[4px]">
+              {(drop, dropSnap) => (
+                <div
+                  ref={drop.innerRef}
+                  {...drop.droppableProps}
+                  className={cn(
+                    "space-y-0.5 min-h-[28px] rounded-lg transition-colors duration-150",
+                    dropSnap.isDraggingOver
+                      ? "bg-violet-50 ring-2 ring-violet-200 ring-inset"
+                      : ""
+                  )}
+                >
                   {unsectionedNotes.map((note, i) => (
                     <Draggable key={note.id} draggableId={note.id} index={i}>
                       {(drag, snap) => renderNoteItem(note, i, drag, snap)}
@@ -419,11 +433,16 @@ export function Notes() {
 
                   {isOpen && (
                     <Droppable droppableId={section.id}>
-                      {(drop) => (
+                      {(drop, dropSnap) => (
                         <div
                           ref={drop.innerRef}
                           {...drop.droppableProps}
-                          className="ml-4 space-y-0.5 min-h-[4px]"
+                          className={cn(
+                            "ml-4 space-y-0.5 min-h-[28px] rounded-lg transition-colors duration-150",
+                            dropSnap.isDraggingOver
+                              ? "bg-violet-50 ring-2 ring-violet-200 ring-inset"
+                              : ""
+                          )}
                         >
                           {secNotes.map((note, i) => (
                             <Draggable key={note.id} draggableId={note.id} index={i}>
@@ -560,8 +579,9 @@ export function Notes() {
                 ) : (
                   <div className="p-6">
                     <NoteEditor
-                      note={selectedNote}
+                      content={selectedNote.content}
                       isEditing={false}
+                      setIsEditing={setIsEditing}
                       onChange={content => updateNote(selectedNote.id, { content })}
                     />
                   </div>
@@ -596,7 +616,7 @@ export function Notes() {
               onClick={() => {
                 const n = contextMenu.note;
                 const copy = getUniqueName(`${n.title} Copy`, n.sectionId);
-                addNote({ title: copy, content: n.content, workspace, sectionId: n.sectionId });
+                addNote({ title: copy, content: n.content, workspace, sectionId: n.sectionId } as any);
                 setContextMenu(null);
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
@@ -689,13 +709,4 @@ export function Notes() {
       </div>
     </DragDropContext>
   );
-
-  // function handleDragConflictConfirm() {
-  //   if (!dragConflict) return;
-  //   updateNote(dragConflict.noteId, {
-  //     sectionId: dragConflict.targetSectionId,
-  //     title: dragConflict.newName.trim(),
-  //   });
-  //   setDragConflict(null);
-  // }
 }
