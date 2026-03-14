@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
@@ -12,8 +12,19 @@ import { cn } from './lib/utils';
 import { useAppStore } from './store';
 
 export default function App() {
-  const { currentView, setCurrentView } = useAppStore();
+  const { currentView, setCurrentView, setSelectedNoteId } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Handle "Open in New Tab" from Notes context menu.
+  // When a new tab opens, sessionStorage carries the note ID; we navigate to it.
+  useEffect(() => {
+    const openNoteId = sessionStorage.getItem('nexus_open_note');
+    if (openNoteId) {
+      sessionStorage.removeItem('nexus_open_note');
+      setCurrentView('notes');
+      setSelectedNoteId(openNoteId);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderView = () => {
     switch (currentView) {
@@ -43,23 +54,23 @@ export default function App() {
     <div className="flex h-screen bg-white text-zinc-950 font-sans overflow-hidden">
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden" 
-          onClick={() => setIsMobileMenuOpen(false)} 
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
-      
+
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
-        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        'fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0',
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <Sidebar 
-          currentView={currentView} 
-          setCurrentView={(v) => { 
-            setCurrentView(v); 
-            setIsMobileMenuOpen(false); 
-          }} 
+        <Sidebar
+          currentView={currentView}
+          setCurrentView={(v) => {
+            setCurrentView(v);
+            setIsMobileMenuOpen(false);
+          }}
         />
       </div>
 
@@ -77,7 +88,7 @@ export default function App() {
             <Menu className="w-5 h-5" />
           </Button>
         </div>
-        
+
         <main className="flex-1 overflow-y-auto">
           {renderView()}
         </main>
