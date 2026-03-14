@@ -10,6 +10,8 @@ import { Plus, MoreVertical, Calendar as CalendarIcon, LayoutGrid, List, LayoutT
 import { format, addDays, startOfWeek, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
+import { TaskCard } from './TaskCard';
+import { Confetti } from './Confetti';
 
 const COLUMNS: Status[] = ['To Do', 'In Progress', 'In Review', 'Done'];
 type TaskView = 'board' | 'list' | 'matrix' | 'backlog' | 'timeline' | 'calendar';
@@ -23,6 +25,7 @@ export function Tasks() {
   const [newTaskAddToCalendar, setNewTaskAddToCalendar] = useState(false);
   const [currentTaskView, setCurrentTaskView] = useState<TaskView>('board');
   const [timelineScale, setTimelineScale] = useState<'weeks' | 'months'>('weeks');
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const workspaceTasks = tasks.filter(t => {
     if (t.workspace !== workspace) return false;
@@ -33,14 +36,22 @@ export function Tasks() {
   const onDragEnd = (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
-    
+
     if (destination.droppableId === source.droppableId) {
       if (destination.index !== source.index) {
         reorderTasks(source.index, destination.index, source.droppableId as Status);
       }
       return;
     }
-    
+
+    if (destination.droppableId === 'Done') {
+      if (settings.celebrationEffects) setShowConfetti(true);
+      const task = tasks.find(t => t.id === draggableId);
+      if (task?.recurringInterval) {
+        updateTask(draggableId, { streakCount: (task.streakCount || 0) + 1 });
+      }
+    }
+
     moveTask(draggableId, destination.droppableId as Status);
   };
 
@@ -125,31 +136,13 @@ export function Tasks() {
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
                             style={{ ...provided.draggableProps.style }}
-                            onClick={() => setSelectedTaskId(task.id)}
                           >
-                            <Card className={cn(
-                              "shadow-sm border-zinc-200/60 cursor-pointer hover:border-zinc-300 transition-colors",
-                              snapshot.isDragging ? 'shadow-md ring-1 ring-zinc-300' : '',
-                              selectedTaskId === task.id ? 'ring-2 ring-indigo-500' : ''
-                            )}>
-                              <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                  <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 border", getPriorityColor(task.priority))}>
-                                    {task.priority}
-                                  </Badge>
-                                  {task.dueDate && (
-                                    <div className="flex items-center text-xs text-zinc-500">
-                                      <CalendarIcon className="w-3 h-3 mr-1" />
-                                      {format(task.dueDate, 'MMM d')}
-                                    </div>
-                                  )}
-                                </div>
-                                <h4 className="font-medium text-sm text-zinc-900 mb-1">{task.title}</h4>
-                                {task.description && (
-                                  <p className="text-xs text-zinc-500 line-clamp-2">{task.description}</p>
-                                )}
-                              </CardContent>
-                            </Card>
+                            <TaskCard
+                              task={task}
+                              isDragging={snapshot.isDragging}
+                              isSelected={selectedTaskId === task.id}
+                              onClick={() => setSelectedTaskId(task.id)}
+                            />
                           </div>
                         )}
                       </Draggable>
@@ -639,6 +632,7 @@ export function Tasks() {
       {currentTaskView === 'timeline' && renderTimelineView()}
       
       {selectedTaskId && <TaskDetailModal />}
+      <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
     </div>
   );
 }

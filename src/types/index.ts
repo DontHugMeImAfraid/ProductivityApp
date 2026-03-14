@@ -6,24 +6,53 @@ export type TaskType = 'Epic' | 'Story' | 'Task' | 'Bug';
 export interface Profile {
   id: string;
   name: string;
-  color: string;
-  icon: string;
+  color: string;      // hex color e.g. "#6366f1"
+  icon: string;       // lucide icon name e.g. "Briefcase"
+  isDefault?: boolean;
 }
 
 export interface Settings {
+  // Task Creation
   allowBackDatingTasks: boolean;
+  hideCompletedTasks: boolean;
+
+  // Metrics & Scales
   enablePriority: boolean;
   enableImpact: boolean;
   enableEffort: boolean;
   scaleSystem: '1-5' | '1-10';
-  hideCompletedTasks: boolean;
+
+  // Calendar
   taskToCalendarAutomation: 'always' | 'prompt' | 'if-time' | 'never';
-  defaultTaskDuration: number;
+  defaultTaskDuration: number; // minutes
+
+  // Notes / Markdown
   markdownRenderMode: 'always' | 'dynamic' | 'never';
+
+  // Appearance
   uiDensity: 'compact' | 'comfortable';
   sidebarBehavior: 'auto-hide' | 'icons-only' | 'full';
-  defaultLandingPage: 'calendar' | 'daily-note' | 'task-kanban';
+  defaultLandingPage: 'dashboard' | 'calendar' | 'daily-note' | 'task-kanban';
   statusColors: Record<Status, string>;
+
+  // Productivity Behaviors
+  dailyResetTime: string;        // HH:MM e.g. "04:00"
+  celebrationEffects: boolean;   // confetti on task completion
+  streakTracking: boolean;
+  nuclearMode: boolean;          // suppress all non-active-profile notifications
+
+  // Privacy
+  cloakMode: boolean;            // blur sensitive content globally
+
+  // Notifications
+  reminderLeadTime: number;      // minutes before event
+  morningDigest: boolean;
+  eveningDigest: boolean;
+
+  // Data & Security
+  autoArchive: '1-day' | '7-days' | '30-days' | 'never';
+  trashRetention: number;        // days
+  biometricLock: boolean;
 }
 
 export interface Task {
@@ -36,7 +65,7 @@ export interface Task {
   createdAt: number;
   startDate?: number;
   dueDate?: number;
-  time?: string; // HH:MM
+  time?: string;                 // HH:MM
   addToCalendar?: boolean;
   linkedNoteIds?: string[];
   effort?: number;
@@ -45,6 +74,8 @@ export interface Task {
   order?: number;
   parentId?: string;
   type?: TaskType;
+  recurringInterval?: number;    // days after completion (smart recursive)
+  streakCount?: number;
 }
 
 export interface NoteSection {
@@ -74,6 +105,8 @@ export interface CalendarEvent {
   isPrivate: boolean;
   linkedNoteId?: string;
   linkedTaskId?: string;
+  isRecurring?: boolean;
+  recurringDays?: number[];      // 0=Sun, 1=Mon...
 }
 
 export interface AppState {
@@ -87,22 +120,22 @@ export interface AppState {
   events: CalendarEvent[];
   profiles: Profile[];
   settings: Settings;
-  
+
   setWorkspace: (workspace: Workspace) => void;
   setCurrentView: (view: string) => void;
   setSelectedNoteId: (id: string | null) => void;
   setSelectedTaskId: (id: string | null) => void;
-  
+
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   moveTask: (id: string, newStatus: Status) => void;
   reorderTasks: (startIndex: number, endIndex: number, status: Status) => void;
-  
-  addNote: (note: Omit<Note, 'createdAt' | 'updatedAt'>) => void;
+
+  addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
-  
+
   addNoteSection: (section: Omit<NoteSection, 'id'>) => void;
   deleteNoteSection: (id: string) => void;
 
