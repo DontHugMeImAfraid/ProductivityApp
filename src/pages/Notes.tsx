@@ -226,7 +226,18 @@ export function Notes() {
 
   const handleDragConflictConfirm = () => {
     if (!dragConflict) return;
-    updateNote(dragConflict.noteId, { sectionId: dragConflict.targetSectionId, title: dragConflict.newName.trim() });
+    const trimmed = dragConflict.newName.trim();
+    if (!trimmed) return;
+
+    // Re-check: the entered name must not still conflict with another note in the target folder
+    const stillConflicts = workspaceNotes.some(
+      n => n.sectionId === dragConflict.targetSectionId &&
+           n.title === trimmed &&
+           n.id !== dragConflict.noteId
+    );
+    if (stillConflicts) return; // keep modal open — user must choose a different name
+
+    updateNote(dragConflict.noteId, { sectionId: dragConflict.targetSectionId, title: trimmed });
     setDragConflict(null);
   };
 
@@ -258,7 +269,7 @@ export function Notes() {
         className={cn(
           "group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer select-none",
           // Only transition colors/shadow, never transform (conflicts with dnd)
-          "transition-[background-color,box-shadow] duration-150",
+          "transition-[background-color,box-shadow] duration-100",
           isSelected && !snapshot?.isDragging
             ? "bg-violet-50 text-violet-700"
             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
@@ -266,7 +277,7 @@ export function Notes() {
           snapshot?.isDragging && "bg-white shadow-lg ring-2 ring-violet-400 ring-offset-1 text-violet-700"
         )}
       >
-        <FileText className={cn("w-3.5 h-3.5 shrink-0", isSelected ? "text-violet-500" : "text-slate-400")} />
+        <FileText className={cn("w-1 h-2.0 shrink-0", isSelected ? "text-violet-500" : "text-slate-400")} />
         {isRenaming ? (
           <input
             autoFocus
@@ -292,7 +303,7 @@ export function Notes() {
           onClick={e => { e.stopPropagation(); setContextMenu({ x: e.currentTarget.getBoundingClientRect().right, y: e.currentTarget.getBoundingClientRect().bottom, note }); }}
           className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 opacity-0 group-hover:opacity-100 transition-all"
         >
-          <MoreHorizontal className="w-3.5 h-3.5" />
+          <MoreHorizontal className="w-3.5 h-3" />
         </button>
       </div>
     );
@@ -305,38 +316,53 @@ export function Notes() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex h-full overflow-hidden bg-white">
+      <div className="flex h-full overflow-hidden relative">
 
         {/* ── Sidebar ──────────────────────────────────────────────────── */}
         <div
-          className="flex flex-col border-r border-slate-200 bg-slate-50/60 shrink-0 overflow-hidden"
+          className="flex flex-col bg-slate-50 border-r border-slate-200 shrink-0 overflow-hidden"
           style={{ width: sidebarWidth }}
         >
-          {/* Search + actions */}
-          <div className="p-3 space-y-2 border-b border-slate-100">
+          {/* Sidebar header */}
+          <div className="p-3 space-y-2 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Notes</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setIsAddingSection(v => !v)}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                  title="New folder"
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleCreateNote()}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                  title="New note"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
               <input
-                placeholder="Search notes…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                placeholder="Search notes…"
+                className="w-full pl-6 pr-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-violet-300 placeholder:text-slate-400"
               />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <X className="w-3 h-3 text-slate-400" />
+                </button>
+              )}
             </div>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => handleCreateNote()}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> New Note
-              </button>
-              <button
-                onClick={() => setIsAddingSection(v => !v)}
-                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors"
-                title="New folder"
-              >
-                <Folder className="w-3.5 h-3.5" />
-              </button>
+
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] text-slate-400">{workspaceNotes.length} note{workspaceNotes.length !== 1 ? 's' : ''}</span>
               <button
                 onClick={() => setSortBy(s => s === 'updated' ? 'a-z' : s === 'a-z' ? 'z-a' : 'updated')}
                 className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors"
@@ -529,44 +555,16 @@ export function Notes() {
                     className={cn("h-8 text-xs", isEditing && "bg-violet-600 hover:bg-violet-700 text-white")}
                     onClick={() => setIsEditing(!isEditing)}
                   >
-                    {isEditing ? 'Preview' : 'Edit'}
+                    {isEditing ? (
+                      <><AlignLeft className="w-3 h-3 mr-1.5" />Preview</>
+                    ) : (
+                      <><Edit2 className="w-3 h-3 mr-1.5" />Edit</>
+                    )}
                   </Button>
                 </div>
               </div>
 
-              {/* Linked tasks strip */}
-              {linkedTasks.length > 0 && (
-                <div className="px-6 py-3 border-b border-slate-100 bg-violet-50/40 flex items-center gap-2 flex-wrap">
-                  <CheckSquare className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-                  <span className="text-xs font-medium text-violet-600 mr-1">Linked tasks:</span>
-                  {linkedTasks.map(t => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-violet-200 rounded-full text-xs text-violet-700 group"
-                    >
-                      <button
-                        onClick={() => {
-                          if (t.projectId) setSelectedProjectId(t.projectId);
-                          setSelectedTaskId(t.id);
-                          setCurrentView('tasks');
-                        }}
-                        className="hover:underline"
-                      >
-                        {t.title}
-                      </button>
-                      <button
-                        onClick={() => handleUnlinkTask(t.id)}
-                        className="opacity-0 group-hover:opacity-100 text-violet-400 hover:text-red-500 transition-all"
-                        title="Unlink task"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Editor — scales with screen */}
+              {/* Note body */}
               <div className="flex-1 overflow-y-auto">
                 {isEditing ? (
                   <textarea
@@ -678,34 +676,52 @@ export function Notes() {
         })()}
 
         {/* ── Drag conflict modal ───────────────────────────────────────── */}
-        {dragConflict && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
-              <div className="p-6">
-                <h3 className="text-base font-semibold text-slate-900 mb-1">Name conflict</h3>
-                <p className="text-sm text-slate-500 mb-4">
-                  A note with this name exists in that folder. Enter a new name:
-                </p>
-                <Input
-                  autoFocus
-                  value={dragConflict.newName}
-                  onChange={e => setDragConflict({ ...dragConflict, newName: e.target.value })}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleDragConflictConfirm();
-                    if (e.key === 'Escape') setDragConflict(null);
-                  }}
-                  placeholder="New file name…"
-                />
-              </div>
-              <div className="px-6 pb-5 flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setDragConflict(null)}>Cancel</Button>
-                <Button size="sm" onClick={handleDragConflictConfirm} disabled={!dragConflict.newName.trim()}>
-                  Move & Rename
-                </Button>
+        {dragConflict && (() => {
+          const trimmed = dragConflict.newName.trim();
+          const stillConflicts = !!trimmed && workspaceNotes.some(
+            n => n.sectionId === dragConflict.targetSectionId &&
+                 n.title === trimmed &&
+                 n.id !== dragConflict.noteId
+          );
+          return (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+                <div className="p-6">
+                  <h3 className="text-base font-semibold text-slate-900 mb-1">Name conflict</h3>
+                  <p className="text-sm text-slate-500 mb-4">
+                    A note with this name exists in that folder. Enter a new name:
+                  </p>
+                  <Input
+                    autoFocus
+                    value={dragConflict.newName}
+                    onChange={e => setDragConflict({ ...dragConflict, newName: e.target.value })}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleDragConflictConfirm();
+                      if (e.key === 'Escape') setDragConflict(null);
+                    }}
+                    placeholder="New file name…"
+                    className={stillConflicts ? 'border-red-300 focus:border-red-400' : ''}
+                  />
+                  {stillConflicts && (
+                    <p className="text-xs text-red-500 mt-1.5">
+                      A note with this name already exists in that folder.
+                    </p>
+                  )}
+                </div>
+                <div className="px-6 pb-5 flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setDragConflict(null)}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    onClick={handleDragConflictConfirm}
+                    disabled={!trimmed || stillConflicts}
+                  >
+                    Move & Rename
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </DragDropContext>
   );
