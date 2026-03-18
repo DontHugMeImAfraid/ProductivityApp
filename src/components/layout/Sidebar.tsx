@@ -23,7 +23,7 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
     { id: 'tasks',     label: 'Tasks & Projects', icon: FolderKanban },
     { id: 'notes',     label: 'Notes',            icon: FileText },
     { id: 'calendar',  label: 'Calendar',         icon: Calendar },
-    { id: 'ai',        label: 'AI Assistant',     icon: Sparkles },
+    { id: 'spending', label: 'Spending', icon: Sparkles },
   ];
 
   const getIcon = (iconName: string) => {

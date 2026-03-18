@@ -3,7 +3,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { Notes } from './pages/Notes';
-import { AIAssistant } from './pages/AIAssistant';
+import { SpendingManager } from './pages/SpendingManager';
 import { CalendarView } from './pages/Calendar';
 import { Settings } from './pages/Settings';
 import { Menu, Sparkles } from 'lucide-react';
@@ -43,7 +43,7 @@ export default function App() {
       case 'dashboard': return <Dashboard />;
       case 'tasks':     return <Tasks />;
       case 'notes':     return <Notes />;
-      case 'ai':        return <AIAssistant />;
+      case 'spending': return <SpendingManager />;
       case 'calendar':  return <CalendarView />;
       case 'settings':  return <Settings />;
       default:
