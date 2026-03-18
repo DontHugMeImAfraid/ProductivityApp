@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -14,13 +15,15 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Category = 'Food'|'Transport'|'Housing'|'Shopping'|'Utilities'|'Entertainment'|'Health'|'Other';
+type Category = 'Food'|'Transport'|'Housing'|'Shopping'|'Utilities'|'Entertainment'|'Health'|'Other'
+              | 'Salary'|'Bonus'|'Freelance'|'Investments'|'Refunds'|'Gifts';
 type TxType    = 'expense'|'income';
 type TimeRange = 'week'|'month'|'year'|'all';
 type ChartView = 'percent'|'amount';
 type GroupBy   = 'date'|'category'|'none';
 type CatSort   = 'spend'|'increase'|'overbudget';
 type AlertSeverity = 'warning'|'critical'|'info';
+type ActiveCard = 'balance'|'income'|'expenses'|'subscriptions'|null;
 
 interface Transaction {
   id: string; label: string; amount: number; category: Category;
@@ -49,6 +52,16 @@ const CATEGORIES: { name: Category; icon: React.FC<any>; color: string; bg: stri
   { name:'Entertainment', icon:Coffee,         color:'#14b8a6', bg:'#f0fdfa' },
   { name:'Health',        icon:Tag,            color:'#10b981', bg:'#f0fdf4' },
   { name:'Other',         icon:MoreHorizontal, color:'#6b7280', bg:'#f9fafb' },
+];
+
+const INCOME_CATEGORIES: { name: Category; icon: React.FC<any>; color: string; bg: string }[] = [
+  { name:'Salary',      icon:DollarSign,     color:'#16a34a', bg:'#f0fdf4' },
+  { name:'Bonus',       icon:Star,           color:'#d97706', bg:'#fffbeb' },
+  { name:'Freelance',   icon:Zap,            color:'#7c3aed', bg:'#f5f3ff' },
+  { name:'Investments', icon:TrendingUp,     color:'#0891b2', bg:'#f0f9ff' },
+  { name:'Refunds',     icon:ArrowDownRight, color:'#059669', bg:'#ecfdf5' },
+  { name:'Gifts',       icon:Tag,            color:'#db2777', bg:'#fdf2f8' },
+  { name:'Other',       icon:MoreHorizontal, color:'#6b7280', bg:'#f9fafb' },
 ];
 
 const DEFAULT_BUDGETS: Budget[] = [
@@ -98,7 +111,7 @@ const fmt     = (n:number)=>new Intl.NumberFormat('en-GB',{style:'currency',curr
 const fmtFull = (n:number)=>new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(n);
 const getCatMeta = (name:Category)=>CATEGORIES.find(c=>c.name===name)??CATEGORIES[CATEGORIES.length-1];
 
-function getDateRange(range:TimeRange){
+function getDateRange(range: TimeRange, cycleStartDay: number = 1){
   const now=new Date(), end=new Date(now);
   let start:Date, prevStart:Date, prevEnd:Date;
   if(range==='week'){
@@ -106,9 +119,20 @@ function getDateRange(range:TimeRange){
     prevEnd=new Date(start); prevEnd.setDate(start.getDate()-1);
     prevStart=new Date(prevEnd); prevStart.setDate(prevEnd.getDate()-7);
   } else if(range==='month'){
-    start=new Date(now.getFullYear(),now.getMonth(),1);
-    prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
-    prevEnd=new Date(now.getFullYear(),now.getMonth(),0);
+    // Custom cycle: from cycleStartDay of previous/current month
+    const today=now.getDate();
+    const clampedStart = Math.min(cycleStartDay, 28); // safe for all months
+    if(today >= clampedStart){
+      // Cycle started this calendar month
+      start=new Date(now.getFullYear(), now.getMonth(), clampedStart);
+      prevStart=new Date(now.getFullYear(), now.getMonth()-1, clampedStart);
+      prevEnd=new Date(now.getFullYear(), now.getMonth(), clampedStart-1);
+    } else {
+      // Cycle started last calendar month
+      start=new Date(now.getFullYear(), now.getMonth()-1, clampedStart);
+      prevStart=new Date(now.getFullYear(), now.getMonth()-2, clampedStart);
+      prevEnd=new Date(now.getFullYear(), now.getMonth()-1, clampedStart-1);
+    }
   } else if(range==='year'){
     start=new Date(now.getFullYear(),0,1);
     prevStart=new Date(now.getFullYear()-1,0,1);
@@ -325,7 +349,7 @@ function GoalsModal({goals,onClose,onSave}:{
 }){
   const [list,setList]=useState<Goal[]>(goals);
   const addGoal=()=>setList(g=>[...g,{
-    id:crypto.randomUUID(),label:'New Goal',targetAmount:1000,
+    id:uuidv4(),label:'New Goal',targetAmount:1000,
     savedAmount:0,color:GOAL_COLORS[g.length%GOAL_COLORS.length],
   }]);
   const upd=(id:string,k:keyof Goal,v:any)=>
@@ -394,15 +418,25 @@ function TxModal({initial,lastCategory,onClose,onSave}:{
   initial?:Transaction; lastCategory?:Category;
   onClose:()=>void; onSave:(tx:Omit<Transaction,'id'>&{id?:string})=>void;
 }){
-  const [label,setLabel]     =useState(initial?.label??'');
-  const [amount,setAmount]   =useState(initial?String(initial.amount):'');
-  const [category,setCategory]=useState<Category>(initial?.category??lastCategory??'Food');
-  const [type,setType]       =useState<TxType>(initial?.type??'expense');
-  const [date,setDate]       =useState(initial?.date??new Date().toISOString().slice(0,10));
-  const [note,setNote]       =useState(initial?.note??'');
+  const [label,setLabel]      =useState(initial?.label??'');
+  const [amount,setAmount]    =useState(initial?String(initial.amount):'');
+  const [type,setType]        =useState<TxType>(initial?.type??'expense');
+  const [category,setCategory]=useState<Category>(
+    initial?.category??( (initial?.type??'expense')==='expense'?(lastCategory??'Food'):'Salary' )
+  );
+  const [date,setDate]        =useState(initial?.date??new Date().toISOString().slice(0,10));
+  const [note,setNote]        =useState(initial?.note??'');
   const [tagInput,setTagInput]=useState(initial?.tags?.join(' ')??'');
-  const [recurring,setRec]   =useState(initial?.isRecurring??false);
-  const [recRule,setRecRule] =useState<'daily'|'weekly'|'monthly'>(initial?.recurrenceRule??'monthly');
+  const [recurring,setRec]    =useState(initial?.isRecurring??false);
+  const [recRule,setRecRule]  =useState<'daily'|'weekly'|'monthly'>(initial?.recurrenceRule??'monthly');
+
+  const catList = type==='expense' ? CATEGORIES : INCOME_CATEGORIES;
+
+  const handleTypeChange=(t:TxType)=>{
+    setType(t);
+    // Reset to sensible default for the new type; clear any incompatible category
+    setCategory(t==='expense'?'Food':'Salary');
+  };
 
   const save=()=>{
     const n=parseFloat(amount);
@@ -421,16 +455,17 @@ function TxModal({initial,lastCategory,onClose,onSave}:{
           <h2 className="text-lg font-semibold text-slate-900">{initial?'Edit':'Add'} Transaction</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X className="w-4 h-4"/></button>
         </div>
+        {/* Type toggle */}
         <div className="flex gap-1 mb-4 p-1 bg-slate-100 rounded-xl">
           {(['expense','income'] as TxType[]).map(t=>(
-            <button key={t} onClick={()=>setType(t)}
+            <button key={t} onClick={()=>handleTypeChange(t)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium capitalize transition-all ${type===t?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}`}>{t}</button>
           ))}
         </div>
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
-            <Input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Coffee, Rent…" autoFocus onKeyDown={e=>e.key==='Enter'&&save()}/>
+            <Input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Coffee, Rent, Salary…" autoFocus onKeyDown={e=>e.key==='Enter'&&save()}/>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><label className="text-xs font-medium text-slate-500 mb-1 block">Amount (£)</label>
@@ -438,10 +473,13 @@ function TxModal({initial,lastCategory,onClose,onSave}:{
             <div><label className="text-xs font-medium text-slate-500 mb-1 block">Date</label>
               <Input type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
           </div>
+          {/* Dynamic category grid */}
           <div>
-            <label className="text-xs font-medium text-slate-500 mb-2 block">Category</label>
+            <label className="text-xs font-medium text-slate-500 mb-2 block">
+              Category <span className="text-slate-400">({type==='expense'?'Expense':'Income'} categories)</span>
+            </label>
             <div className="grid grid-cols-4 gap-1.5">
-              {CATEGORIES.map(cat=>{
+              {catList.map(cat=>{
                 const Icon=cat.icon, active=category===cat.name;
                 return <button key={cat.name} onClick={()=>setCategory(cat.name)}
                   className={`flex flex-col items-center gap-1 p-2 rounded-xl border text-[10px] font-medium transition-all ${active?'border-transparent text-white':'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
@@ -619,12 +657,265 @@ function TxRow({tx,selected,onSelect,onEdit,onDuplicate,onTogglePin,onDelete,onU
   );
 }
 
+// ─── Trends Panel ─────────────────────────────────────────────────────────────
+
+function TrendsPanel({data,onClose}:{
+  data:{date:string;income:number;expense:number;avg:number}[];
+  onClose:()=>void;
+}){
+  const maxVal = Math.max(...data.map(d=>Math.max(d.income,d.expense)),1);
+  const H = 120; // bar chart height in px
+  const barW = Math.max(6, Math.floor(600/data.length)-2);
+  const [hover,setHover] = useState<number|null>(null);
+  const [view,setView]   = useState<'bar'|'line'>('bar');
+
+  // For line chart: SVG polyline points
+  const toSvgPts = (arr:number[])=>arr.map((v,i)=>{
+    const x = (i/(arr.length-1))*580+10;
+    const y = H - (v/maxVal)*H + 10;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const expPts = toSvgPts(data.map(d=>d.expense));
+  const incPts = toSvgPts(data.map(d=>d.income));
+  const avgPts = toSvgPts(data.map(d=>d.avg));
+
+  return(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <BarChart2 className="w-4 h-4 text-emerald-500"/>
+            <h2 className="text-base font-semibold text-slate-900">30-Day Spending Trends</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 p-0.5 bg-slate-100 rounded-lg">
+              {(['bar','line'] as const).map(v=>(
+                <button key={v} onClick={()=>setView(v)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${view===v?'bg-white shadow text-slate-800':'text-slate-500'}`}>
+                  {v}
+                </button>
+              ))}
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+              <X className="w-4 h-4"/>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Legend */}
+          <div className="flex items-center gap-5 mb-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-emerald-400 inline-block"/>Income</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block"/>Expenses</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded bg-orange-400 inline-block"/>7-day avg</span>
+          </div>
+
+          {view==='bar'?(
+            <div className="relative" style={{height:`${H+40}px`}}>
+              {/* Y-axis gridlines */}
+              {[0,0.25,0.5,0.75,1].map(pct=>(
+                <div key={pct} className="absolute left-0 right-0 border-t border-slate-100 flex items-center"
+                  style={{bottom:`${pct*H+24}px`}}>
+                  <span className="text-[9px] text-slate-300 pr-1 -translate-y-2">{pct>0?`£${Math.round(maxVal*pct)}`:''}</span>
+                </div>
+              ))}
+              {/* Bars */}
+              <div className="flex items-end gap-px px-1" style={{height:`${H}px`,position:'absolute',bottom:'24px',left:0,right:0}}>
+                {data.map((d,i)=>{
+                  const expH = d.expense>0?Math.max(2,Math.round((d.expense/maxVal)*H)):0;
+                  const incH = d.income >0?Math.max(2,Math.round((d.income /maxVal)*H)):0;
+                  const isHov = hover===i;
+                  const label = new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{month:'short',day:'numeric'});
+                  return(
+                    <div key={d.date} className="relative flex items-end justify-center gap-0.5 flex-1"
+                      onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(null)}>
+                      {incH>0&&<div className="rounded-sm transition-all duration-100"
+                        style={{height:`${incH}px`,background:isHov?'#059669':'#34d399',width:`${Math.max(barW/2-1,3)}px`}}/>}
+                      {expH>0&&<div className="rounded-sm transition-all duration-100"
+                        style={{height:`${expH}px`,background:isHov?'#dc2626':'#f87171',width:`${Math.max(barW/2-1,3)}px`}}/>}
+                      {/* Hover tooltip */}
+                      {isHov&&(
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 bg-slate-900 text-white text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+                          <p className="font-semibold mb-0.5">{label}</p>
+                          {d.income >0&&<p className="text-emerald-300">In: £{d.income.toFixed(0)}</p>}
+                          {d.expense>0&&<p className="text-red-300">Out: £{d.expense.toFixed(0)}</p>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Avg line overlay (SVG) */}
+              <svg className="absolute inset-0 pointer-events-none" style={{bottom:'24px',height:`${H}px`,top:'unset'}}
+                width="100%" height={H} viewBox={`0 0 600 ${H}`} preserveAspectRatio="none">
+                <polyline points={avgPts} fill="none" stroke="#f97316" strokeWidth="1.5"
+                  strokeDasharray="4 2" strokeLinejoin="round" strokeLinecap="round"/>
+              </svg>
+              {/* X-axis labels */}
+              <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2">
+                {[0,7,14,21,29].map(i=>(
+                  <span key={i} className="text-[9px] text-slate-400">
+                    {new Date(data[i]?.date+'T12:00:00').toLocaleDateString('en-GB',{month:'short',day:'numeric'})}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ):(
+            /* Line chart mode */
+            <svg width="100%" viewBox={`0 0 600 ${H+20}`} className="overflow-visible">
+              {[0,0.25,0.5,0.75,1].map(pct=>(
+                <line key={pct} x1="10" y1={H-(pct*H)+10} x2="590" y2={H-(pct*H)+10}
+                  stroke="#f1f5f9" strokeWidth="1"/>
+              ))}
+              <polyline points={incPts} fill="none" stroke="#34d399" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+              <polyline points={expPts} fill="none" stroke="#f87171" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+              <polyline points={avgPts} fill="none" stroke="#f97316" strokeWidth="1.5" strokeDasharray="4 2" strokeLinejoin="round" strokeLinecap="round"/>
+            </svg>
+          )}
+
+          {/* Summary row */}
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {[
+              {label:'Total Income', value:data.reduce((s,d)=>s+d.income,0), color:'text-emerald-600'},
+              {label:'Total Expenses',value:data.reduce((s,d)=>s+d.expense,0),color:'text-red-500'},
+              {label:'Net',value:data.reduce((s,d)=>s+d.income-d.expense,0),color:data.reduce((s,d)=>s+d.income-d.expense,0)>=0?'text-emerald-600':'text-red-500'},
+            ].map(s=>(
+              <div key={s.label} className="p-3 bg-slate-50 rounded-xl text-center">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">{s.label}</p>
+                <p className={`text-sm font-bold ${s.color}`}>£{Math.abs(s.value).toLocaleString('en-GB',{maximumFractionDigits:0})}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Recurring Manager ─────────────────────────────────────────────────────────
+
+function RecurringManager({transactions,onClose,onUpdate,onDelete}:{
+  transactions: Transaction[];
+  onClose:()=>void;
+  onUpdate:(id:string,updates:Partial<Transaction>)=>void;
+  onDelete:(id:string)=>void;
+}){
+  const recurring = transactions.filter(t=>t.isRecurring);
+  const monthlyTotal = recurring.filter(t=>t.type==='expense'&&t.recurrenceRule==='monthly').reduce((s,t)=>s+t.amount,0);
+  const annualTotal  = monthlyTotal*12;
+
+  return(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <Repeat className="w-4 h-4 text-sky-500"/>
+              <h2 className="text-base font-semibold text-slate-900">Recurring Transactions</h2>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {recurring.length} recurring · <span className="font-medium text-slate-600">£{monthlyTotal.toFixed(0)}/mo</span> · <span className="font-medium text-slate-600">£{annualTotal.toFixed(0)}/yr</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+          {recurring.length===0&&(
+            <div className="p-10 text-center text-slate-400">
+              <Repeat className="w-8 h-8 mx-auto mb-2 opacity-30"/>
+              <p className="text-sm">No recurring transactions yet</p>
+            </div>
+          )}
+          {recurring.map(t=>{
+            const cat = CATEGORIES.find(c=>c.name===t.category)??CATEGORIES[CATEGORIES.length-1];
+            const Icon = cat.icon;
+            const annualCost = t.recurrenceRule==='monthly'?t.amount*12:t.recurrenceRule==='weekly'?t.amount*52:t.amount*365;
+            return(
+              <div key={t.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 group transition-colors">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{background:cat.bg}}>
+                  <Icon className="w-4 h-4" style={{color:cat.color}}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{t.label}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] text-slate-400 capitalize">{t.recurrenceRule}</span>
+                    <span className="text-[10px] text-slate-300">·</span>
+                    <span className="text-[10px] text-slate-400">£{annualCost.toFixed(0)}/yr</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                      style={{background:cat.bg,color:cat.color}}>{t.category}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className={`text-sm font-bold ${t.type==='income'?'text-emerald-600':'text-slate-800'}`}>
+                    {t.type==='income'?'+':''}{t.type==='income'?'':'−'}£{t.amount.toFixed(0)}
+                    <span className="text-[10px] font-normal text-slate-400 ml-0.5">/{t.recurrenceRule==='monthly'?'mo':t.recurrenceRule==='weekly'?'wk':'day'}</span>
+                  </span>
+                </div>
+                {/* Actions - visible on hover */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={()=>onUpdate(t.id,{isRecurring:false,recurrenceRule:undefined})}
+                    title="Stop recurring"
+                    className="px-2 py-1 text-[10px] font-medium border border-amber-200 text-amber-600 rounded-lg hover:bg-amber-50 transition-colors">
+                    Pause
+                  </button>
+                  <button
+                    onClick={()=>{ if(window.confirm(`Delete "${t.label}"?`)) onDelete(t.id); }}
+                    title="Delete"
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5"/>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <p className="text-xs text-slate-400">
+            {recurring.filter(t=>t.type==='expense').length} expenses · {recurring.filter(t=>t.type==='income').length} income
+          </p>
+          <button onClick={onClose} className="px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors text-slate-700">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Local storage hook ───────────────────────────────────────────────────────
+
+function useLocalStorage<T>(key: string, initialValue: T | (()=>T)): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(()=>{
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored !== null) return JSON.parse(stored) as T;
+    } catch {}
+    return typeof initialValue === 'function' ? (initialValue as ()=>T)() : initialValue;
+  });
+
+  const setAndPersist: React.Dispatch<React.SetStateAction<T>> = useCallback((action) => {
+    setValue(prev => {
+      const next = typeof action === 'function' ? (action as (p:T)=>T)(prev) : action;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [key]);
+
+  return [value, setAndPersist];
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function SpendingManager(){
-  const [transactions, setTransactions] = useState<Transaction[]>(makeSeed);
-  const [budgets,      setBudgets]      = useState<Budget[]>(DEFAULT_BUDGETS);
-  const [goals,        setGoals]        = useState<Goal[]>([
+  const [transactions, setTransactions] = useLocalStorage<Transaction[]>('nexus_spending_txs', makeSeed);
+  const [budgets,      setBudgets]      = useLocalStorage<Budget[]>('nexus_spending_budgets', DEFAULT_BUDGETS);
+  const [goals,        setGoals]        = useLocalStorage<Goal[]>('nexus_spending_goals', [
     {id:'g1',label:'Emergency Fund',targetAmount:5000,savedAmount:1540,color:'#6366f1'},
     {id:'g2',label:'Holiday 2026',  targetAmount:2000,savedAmount:650, color:'#f59e0b'},
   ]);
@@ -646,6 +937,11 @@ export function SpendingManager(){
   const [maxAmt,       setMaxAmt]       = useState('');
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
   const [dismissedAlerts, setDismissed] = useState<Set<string>>(new Set());
+  const [activeCard,     setActiveCard]     = useState<ActiveCard>(null);
+  const [cycleStartDay,  setCycleStartDay]  = useLocalStorage<number>('nexus_spending_cycle_day', 1);
+  const [showCycleSettings, setShowCycleSettings] = useState(false);
+  const [showTrends,     setShowTrends]     = useState(false);
+  const [showRecurring,  setShowRecurring]  = useState(false);
 
   // Keyboard shortcut for command bar
   useEffect(()=>{
@@ -657,7 +953,7 @@ export function SpendingManager(){
   },[]);
 
   const lastCategory=useMemo(()=>transactions.filter(t=>t.type==='expense')[0]?.category,[transactions]);
-  const {start,end,prevStart,prevEnd}=useMemo(()=>getDateRange(timeRange),[timeRange]);
+  const {start,end,prevStart,prevEnd}=useMemo(()=>getDateRange(timeRange, cycleStartDay),[timeRange, cycleStartDay]);
 
   const currTxs=useMemo(()=>
     timeRange==='all'?transactions:transactions.filter(t=>inRange(t.date,start,end)),
@@ -808,8 +1104,15 @@ export function SpendingManager(){
   const filtered=useMemo(()=>{
     const min=parseFloat(minAmt)||0, max=parseFloat(maxAmt)||Infinity;
     return [...transactions].filter(t=>{
-      if(typeFilter!=='all'&&t.type!==typeFilter) return false;
-      if(filterCat!=='All'&&t.category!==filterCat) return false;
+      // Summary card quick-filters take precedence
+      if(activeCard==='income'       && t.type!=='income')  return false;
+      if(activeCard==='expenses'     && t.type!=='expense') return false;
+      if(activeCard==='subscriptions'&& !(t.isRecurring&&t.type==='expense')) return false;
+      // Regular filters (ignored when activeCard is set, except search+amount)
+      if(!activeCard){
+        if(typeFilter!=='all'&&t.type!==typeFilter) return false;
+        if(filterCat!=='All'&&t.category!==filterCat) return false;
+      }
       if(search){
         const q=search.toLowerCase();
         if(![t.label,t.category,t.note??'',...(t.tags??[])].some(s=>s.toLowerCase().includes(q))) return false;
@@ -821,7 +1124,7 @@ export function SpendingManager(){
       if(!a.isPinned&&b.isPinned) return 1;
       return b.date.localeCompare(a.date);
     });
-  },[transactions,filterCat,search,typeFilter,minAmt,maxAmt]);
+  },[transactions,filterCat,search,typeFilter,minAmt,maxAmt,activeCard]);
 
   const grouped=useMemo(()=>{
     if(groupBy==='none') return [{label:'All',txs:filtered}];
@@ -843,12 +1146,12 @@ export function SpendingManager(){
   // Actions
   const addOrUpdateTx=useCallback((tx:Omit<Transaction,'id'>&{id?:string})=>{
     if(tx.id) setTransactions(prev=>prev.map(t=>t.id===tx.id?{...tx,id:tx.id} as Transaction:t));
-    else setTransactions(prev=>[{...tx,id:crypto.randomUUID()} as Transaction,...prev]);
+    else setTransactions(prev=>[{...tx,id:uuidv4()} as Transaction,...prev]);
   },[]);
   const updateTx=(id:string,updates:Partial<Transaction>)=>
     setTransactions(prev=>prev.map(t=>t.id===id?{...t,...updates}:t));
   const deleteTx=(id:string)=>setTransactions(prev=>prev.filter(t=>t.id!==id));
-  const duplicateTx=(tx:Transaction)=>setTransactions(prev=>[{...tx,id:crypto.randomUUID(),isPinned:false},...prev]);
+  const duplicateTx=(tx:Transaction)=>setTransactions(prev=>[{...tx,id:uuidv4(),isPinned:false},...prev]);
   const togglePin=(id:string)=>updateTx(id,{isPinned:!transactions.find(t=>t.id===id)?.isPinned});
 
   const toggleSelect=(id:string)=>setSelected(s=>{const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n;});
@@ -856,6 +1159,51 @@ export function SpendingManager(){
   const bulkTag=(tag:string)=>{selected.forEach(id=>updateTx(id,{tags:[...(transactions.find(t=>t.id===id)?.tags??[]),tag]}));setSelected(new Set());};
 
   const periodLabel={week:'last week',month:'last month',year:'last year',all:''}[timeRange];
+
+  // ── Trends: 30-day daily income vs expense + 7-day rolling avg ────────────
+  const trendsData = useMemo(()=>{
+    const days = 30;
+    const result: { date: string; income: number; expense: number; avg: number }[] = [];
+    for(let i = days-1; i >= 0; i--){
+      const d = new Date(); d.setDate(d.getDate()-i);
+      const ds = d.toISOString().slice(0,10);
+      const dayTxs = transactions.filter(t=>t.date===ds);
+      result.push({
+        date: ds,
+        income:  dayTxs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0),
+        expense: dayTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0),
+        avg: 0,
+      });
+    }
+    // 7-day rolling average on expenses
+    result.forEach((_,i)=>{
+      const window = result.slice(Math.max(0,i-6), i+1);
+      result[i].avg = window.reduce((s,d)=>s+d.expense,0)/window.length;
+    });
+    return result;
+  },[transactions]);
+
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  const exportCSV = useCallback(()=>{
+    const rows = [
+      ['Date','Label','Amount','Type','Category','Note','Tags','Recurring'].join(','),
+      ...filtered.map(t=>[
+        t.date,
+        `"${t.label.replace(/"/g,'""')}"`,
+        t.amount,
+        t.type,
+        t.category,
+        `"${(t.note??'').replace(/"/g,'""')}"`,
+        (t.tags??[]).join(' '),
+        t.isRecurring?t.recurrenceRule??'yes':'',
+      ].join(','))
+    ].join('\n');
+    const blob = new Blob([rows],{type:'text/csv'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `spending-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  },[filtered]);
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return(
@@ -890,12 +1238,23 @@ export function SpendingManager(){
               <span>Search</span>
               <kbd className="ml-1 text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-400">⌘K</kbd>
             </button>
+            <Button variant="secondary" onClick={()=>setShowTrends(true)}>
+              <BarChart2 className="w-3.5 h-3.5 mr-1.5"/>Trends
+            </Button>
+            <Button variant="secondary" onClick={()=>setShowRecurring(true)}>
+              <Repeat className="w-3.5 h-3.5 mr-1.5"/>Recurring
+            </Button>
             <Button variant="secondary" onClick={()=>setShowGoals(true)}>
               <Star className="w-3.5 h-3.5 mr-1.5"/>Goals
             </Button>
             <Button variant="secondary" onClick={()=>setShowBudgets(true)}>
               <Target className="w-3.5 h-3.5 mr-1.5"/>Budgets
             </Button>
+            <button onClick={()=>setShowCycleSettings(v=>!v)}
+              title="Cycle settings"
+              className={`p-2 rounded-xl border transition-all ${showCycleSettings?'bg-emerald-50 border-emerald-300 text-emerald-700':'border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 bg-white'}`}>
+              <SlidersHorizontal className="w-4 h-4"/>
+            </button>
             <Button onClick={()=>setShowModal(true)}>
               <Plus className="w-4 h-4 mr-1"/>Add
             </Button>
@@ -943,12 +1302,37 @@ export function SpendingManager(){
           </div>
         )}
 
+        {/* Cycle settings panel */}
+        {showCycleSettings&&(
+          <div className="mb-5 flex items-center gap-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <SlidersHorizontal className="w-4 h-4 text-emerald-600 shrink-0"/>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-emerald-800">Monthly cycle start date</p>
+              <p className="text-xs text-emerald-600">Months begin on the <strong>{cycleStartDay}{cycleStartDay===1?'st':cycleStartDay===2?'nd':cycleStartDay===3?'rd':'th'}</strong> — useful if your payday isn't the 1st</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="text-xs font-medium text-emerald-700">Start day</label>
+              <select
+                value={cycleStartDay}
+                onChange={e=>setCycleStartDay(Number(e.target.value))}
+                className="text-sm border border-emerald-300 rounded-lg px-2.5 py-1.5 bg-white text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                {Array.from({length:28},(_,i)=>i+1).map(d=>(
+                  <option key={d} value={d}>{d}{d===1?'st':d===2?'nd':d===3?'rd':'th'}</option>
+                ))}
+              </select>
+            </div>
+            <button onClick={()=>setShowCycleSettings(false)} className="text-emerald-400 hover:text-emerald-700 transition-colors">
+              <X className="w-4 h-4"/>
+            </button>
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
           {[
-            {label:'Balance', value:balance, prev:prevIncome-prevExpense, color:balance>=0?'#16a34a':'#dc2626', bg:balance>=0?'#f0fdf4':'#fef2f2', icon:balance>=0?TrendingUp:TrendingDown, spark:sparkData.balance, sparkColor:balance>=0?'#16a34a':'#dc2626'},
-            {label:'Income',  value:totalIncome, prev:prevIncome, color:'#2563eb',bg:'#eff6ff',icon:ArrowDownRight,spark:sparkData.income, sparkColor:'#3b82f6'},
-            {label:'Expenses',value:totalExpense,prev:prevExpense,color:'#ea580c',bg:'#fff7ed',icon:ArrowUpRight,  spark:sparkData.expense,sparkColor:'#f97316'},
+            {key:'balance'  as ActiveCard, label:'Balance', value:balance, prev:prevIncome-prevExpense, color:balance>=0?'#16a34a':'#dc2626', bg:balance>=0?'#f0fdf4':'#fef2f2', icon:balance>=0?TrendingUp:TrendingDown, spark:sparkData.balance, sparkColor:balance>=0?'#16a34a':'#dc2626', accentColor:balance>=0?'#16a34a':'#dc2626'},
+            {key:'income'   as ActiveCard, label:'Income',  value:totalIncome, prev:prevIncome, color:'#2563eb',bg:'#eff6ff',icon:ArrowDownRight,spark:sparkData.income, sparkColor:'#3b82f6', accentColor:'#3b82f6'},
+            {key:'expenses' as ActiveCard, label:'Expenses',value:totalExpense,prev:prevExpense,color:'#ea580c',bg:'#fff7ed',icon:ArrowUpRight,  spark:sparkData.expense,sparkColor:'#f97316', accentColor:'#f97316'},
           ].map(card=>{
             const Icon=card.icon;
             const trend=timeRange!=='all'?trendPct(card.value,card.prev):null;
@@ -956,8 +1340,20 @@ export function SpendingManager(){
             const trendColor=card.label==='Income'?(up?'text-emerald-600':dn?'text-red-500':'text-slate-400')
               :card.label==='Expenses'?(up?'text-red-500':dn?'text-emerald-600':'text-slate-400')
               :(up?'text-emerald-600':dn?'text-red-500':'text-slate-400');
+            const isActive=activeCard===card.key;
             return(
-              <Card key={card.label} className="p-4 border-slate-200 bg-white hover:shadow-md transition-shadow">
+              <Card
+                key={card.label}
+                onClick={()=>setActiveCard(isActive?null:card.key)}
+                className={`p-4 border-2 bg-white cursor-pointer hover:shadow-md transition-all select-none ${
+                  isActive?'shadow-md':'border-slate-200 hover:border-slate-300'
+                }`}
+                style={isActive?{borderColor:card.accentColor,boxShadow:`0 0 0 3px ${card.accentColor}22`}:{}}>
+                {isActive&&(
+                  <div className="flex items-center gap-1.5 mb-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:card.accentColor}}>
+                    <Check className="w-3 h-3"/>Filtering transactions
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{card.label}</span>
@@ -1009,7 +1405,15 @@ export function SpendingManager(){
               </p>
             </div>
           </Card>
-          <Card className="p-4 border-slate-200 bg-white hover:shadow-md transition-shadow">
+          <Card
+            className={`p-4 border-2 bg-white hover:shadow-md transition-all cursor-pointer select-none ${activeCard==='subscriptions'?'shadow-md':'border-slate-200 hover:border-sky-300'}`}
+            style={activeCard==='subscriptions'?{borderColor:'#0ea5e9',boxShadow:'0 0 0 3px #0ea5e922'}:{}}
+            onClick={()=>setActiveCard(activeCard==='subscriptions'?null:'subscriptions')}>
+            {activeCard==='subscriptions'&&(
+              <div className="flex items-center gap-1.5 mb-2 text-[10px] font-semibold uppercase tracking-widest text-sky-600">
+                <Check className="w-3 h-3"/>Filtering subscriptions
+              </div>
+            )}
             <div className="flex items-center gap-3 mb-2">
               <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
                 <Repeat className="w-4 h-4 text-sky-500"/>
@@ -1195,6 +1599,24 @@ export function SpendingManager(){
         {/* Transaction List */}
         <Card className="border-slate-200 bg-white overflow-hidden">
 
+          {/* Active card filter banner */}
+          {activeCard&&(
+            <div className="px-4 pt-3 pb-0">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-sm">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0"/>
+                <span className="text-emerald-800 font-medium capitalize">
+                  {activeCard==='subscriptions'?'Showing recurring subscriptions'
+                   :activeCard==='income'?'Showing income only'
+                   :activeCard==='expenses'?'Showing expenses only'
+                   :'All transactions'}
+                </span>
+                <button onClick={()=>setActiveCard(null)}
+                  className="ml-auto text-emerald-500 hover:text-emerald-700 transition-colors flex items-center gap-1 text-xs font-medium">
+                  <X className="w-3 h-3"/>Clear
+                </button>
+              </div>
+            </div>
+          )}
           {/* Controls */}
           <div className="p-4 border-b border-slate-100 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -1319,14 +1741,48 @@ export function SpendingManager(){
           )}
 
           {filtered.length>0&&(
-            <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs text-slate-400">{filtered.length} transaction{filtered.length!==1?'s':''}</span>
-              <span className="text-xs font-semibold text-slate-600">
-                Net:{' '}
-                <span className={filtered.reduce((s,t)=>s+(t.type==='income'?t.amount:-t.amount),0)>=0?'text-emerald-600':'text-red-500'}>
-                  {fmtFull(filtered.reduce((s,t)=>s+(t.type==='income'?t.amount:-t.amount),0))}
+            <div className="px-4 py-3 border-t border-slate-100 space-y-2">
+              {/* Net total row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{filtered.length} transaction{filtered.length!==1?'s':''}</span>
+                  <button onClick={exportCSV}
+                    className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors border border-emerald-200 rounded-lg px-2 py-0.5 hover:bg-emerald-50">
+                    <ArrowUpRight className="w-3 h-3"/>Export CSV
+                  </button>
+                </div>
+                <span className="text-xs font-semibold text-slate-600">
+                  Net:{' '}
+                  <span className={filtered.reduce((s,t)=>s+(t.type==='income'?t.amount:-t.amount),0)>=0?'text-emerald-600':'text-red-500'}>
+                    {fmtFull(filtered.reduce((s,t)=>s+(t.type==='income'?t.amount:-t.amount),0))}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {/* Top categories breakdown (only when not already filtered by category) */}
+              {filterCat==='All'&&!activeCard&&(()=>{
+                const catMap: Record<string,number> = {};
+                filtered.filter(t=>t.type==='expense').forEach(t=>{catMap[t.category]=(catMap[t.category]??0)+t.amount;});
+                const top = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
+                const total = Object.values(catMap).reduce((s,v)=>s+v,0);
+                if(top.length<2) return null;
+                return(
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {top.map(([cat,val])=>{
+                      const meta = CATEGORIES.find(c=>c.name===cat);
+                      const pct  = total>0?Math.round((val/total)*100):0;
+                      return(
+                        <button key={cat}
+                          onClick={()=>setFilterCat(cat as Category)}
+                          className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border transition-all hover:shadow-sm"
+                          style={{background:meta?.bg??'#f9fafb',color:meta?.color??'#6b7280',borderColor:`${meta?.color??'#6b7280'}30`}}>
+                          <span>{cat}</span>
+                          <span className="opacity-60">{pct}%</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Card>
@@ -1338,10 +1794,13 @@ export function SpendingManager(){
           onFilter={(cat,type,search)=>{setFilterCat(cat);setTypeFilter(type);setSearch(search);}}
           onOpenBudgets={()=>setShowBudgets(true)} onOpenGoals={()=>setShowGoals(true)}/>
       )}
-      {showModal &&<TxModal lastCategory={lastCategory} onClose={()=>setShowModal(false)} onSave={addOrUpdateTx}/>}
-      {editTx   &&<TxModal initial={editTx} onClose={()=>setEditTx(null)} onSave={addOrUpdateTx}/>}
-      {showBudgets&&<BudgetModal budgets={budgets} onClose={()=>setShowBudgets(false)} onSave={setBudgets}/>}
-      {showGoals  &&<GoalsModal goals={goals} onClose={()=>setShowGoals(false)} onSave={setGoals}/>}
+      {showModal    &&<TxModal lastCategory={lastCategory} onClose={()=>setShowModal(false)} onSave={addOrUpdateTx}/>}
+      {editTx       &&<TxModal initial={editTx} onClose={()=>setEditTx(null)} onSave={addOrUpdateTx}/>}
+      {showBudgets  &&<BudgetModal budgets={budgets} onClose={()=>setShowBudgets(false)} onSave={setBudgets}/>}
+      {showGoals    &&<GoalsModal goals={goals} onClose={()=>setShowGoals(false)} onSave={setGoals}/>}
+      {showTrends   &&<TrendsPanel data={trendsData} onClose={()=>setShowTrends(false)}/>}
+      {showRecurring&&<RecurringManager transactions={transactions} onClose={()=>setShowRecurring(false)}
+          onUpdate={updateTx} onDelete={deleteTx}/>}
     </div>
   );
 }
