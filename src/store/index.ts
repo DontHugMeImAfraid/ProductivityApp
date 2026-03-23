@@ -26,6 +26,22 @@ function makeDefaultColumns(projectId: string): ProjectColumn[] {
   }));
 }
 
+// ─── Helper: build a CalendarEvent from a Task ────────────────────────────────
+function buildEventFromTask(task: Task & { id: string }, durationMin: number): CalendarEvent {
+  const [h, m] = task.time ? task.time.split(':').map(Number) : [9, 0];
+  const base = new Date(task.dueDate!);
+  base.setHours(h, m, 0, 0);
+  return {
+    id: uuidv4(),
+    title: task.title,
+    startTime: base.getTime(),
+    endTime: base.getTime() + durationMin * 60_000,
+    workspace: task.workspace,
+    isPrivate: false,
+    linkedTaskId: task.id,
+  };
+}
+
 // ─── Seed data ────────────────────────────────────────────────────────────────
 const seedProjectWork: Project = {
   id: 'proj-work',
@@ -211,19 +227,74 @@ export const useAppStore = create<AppState>()(
 
       // ── Tasks ──────────────────────────────────────────────────────────────
       addTask: (task) => set((state) => {
-        const statusTasks = state.tasks.filter(t => t.status === task.status && t.projectId === task.projectId);
+        const id = uuidv4();
+        const statusTasks = state.tasks.filter(
+          t => t.status === task.status && t.projectId === task.projectId
+        );
         const maxOrder = statusTasks.length > 0
           ? Math.max(...statusTasks.map(t => t.order ?? 0)) + 1
           : 0;
-        return { tasks: [...state.tasks, { ...task, id: uuidv4(), createdAt: Date.now(), order: maxOrder }] };
+        const newTask: Task = { ...task, id, createdAt: Date.now(), order: maxOrder };
+
+        // Auto-create a linked calendar event when addToCalendar is true and dueDate is set
+        let newEvents = state.events;
+        if (task.addToCalendar && task.dueDate) {
+          const event = buildEventFromTask(
+            { ...newTask, id },
+            state.settings.defaultTaskDuration ?? 30
+          );
+          newEvents = [...state.events, event];
+        }
+
+        return { tasks: [...state.tasks, newTask], events: newEvents };
       }),
 
-      updateTask: (id, updates) => set((state) => ({
-        tasks: state.tasks.map(t => t.id === id ? { ...t, ...updates } : t)
-      })),
+      updateTask: (id, updates) => set((state) => {
+        const existing = state.tasks.find(t => t.id === id);
+        if (!existing) {
+          return { tasks: state.tasks.map(t => t.id === id ? { ...t, ...updates } : t) };
+        }
+
+        const updated: Task = { ...existing, ...updates };
+        let newEvents = state.events;
+
+        if (updated.addToCalendar && updated.dueDate) {
+          const linkedIdx = state.events.findIndex(e => e.linkedTaskId === id);
+
+          if (linkedIdx === -1) {
+            // No linked event yet — create one
+            const event = buildEventFromTask(
+              { ...updated, id },
+              state.settings.defaultTaskDuration ?? 30
+            );
+            newEvents = [...state.events, event];
+          } else {
+            // Linked event exists — keep it in sync with the task's due date/time/title
+            newEvents = state.events.map((e, idx) => {
+              if (idx !== linkedIdx) return e;
+              const [h, m] = updated.time ? updated.time.split(':').map(Number) : [9, 0];
+              const base = new Date(updated.dueDate!);
+              base.setHours(h, m, 0, 0);
+              return {
+                ...e,
+                title: updated.title ?? e.title,
+                startTime: base.getTime(),
+                endTime: base.getTime() + (state.settings.defaultTaskDuration ?? 30) * 60_000,
+              };
+            });
+          }
+        }
+
+        return {
+          tasks: state.tasks.map(t => t.id === id ? updated : t),
+          events: newEvents,
+        };
+      }),
 
       deleteTask: (id) => set((state) => ({
         tasks: state.tasks.filter(t => t.id !== id),
+        // Remove any calendar events that were auto-created for this task
+        events: state.events.filter(e => e.linkedTaskId !== id),
         notes: state.notes.map(n => ({
           ...n,
           linkedTaskIds: (n.linkedTaskIds || []).filter(tid => tid !== id)
@@ -262,6 +333,10 @@ export const useAppStore = create<AppState>()(
 
       deleteNote: (id) => set((state) => ({
         notes: state.notes.filter(n => n.id !== id),
+        // Remove note links from calendar events
+        events: state.events.map(e =>
+          e.linkedNoteId === id ? { ...e, linkedNoteId: undefined } : e
+        ),
         tasks: state.tasks.map(t => ({
           ...t,
           linkedNoteIds: (t.linkedNoteIds || []).filter(nid => nid !== id)
@@ -285,9 +360,18 @@ export const useAppStore = create<AppState>()(
         events: state.events.map(e => e.id === id ? { ...e, ...updates } : e)
       })),
 
-      deleteEvent: (id) => set((state) => ({
-        events: state.events.filter(e => e.id !== id)
-      })),
+      deleteEvent: (id) => set((state) => {
+        const event = state.events.find(e => e.id === id);
+        return {
+          events: state.events.filter(e => e.id !== id),
+          // If the deleted event was linked to a task, clear addToCalendar on that task
+          tasks: event?.linkedTaskId
+            ? state.tasks.map(t =>
+                t.id === event.linkedTaskId ? { ...t, addToCalendar: false } : t
+              )
+            : state.tasks,
+        };
+      }),
 
       // ── Profiles ───────────────────────────────────────────────────────────
       addProfile: (profile) => set((state) => ({
@@ -361,7 +445,6 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'nexus-store',
-      // Migrate old stored data to add new fields
       version: 2,
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
