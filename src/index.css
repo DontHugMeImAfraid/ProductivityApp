@@ -1,1 +1,114 @@
 @import "tailwindcss";
+/* ── Add this entire block to the bottom of src/index.css ── */
+
+/* Default CSS variable values (light theme) — overridden by ThemeContext at runtime */
+:root {
+  --nxs-bg-primary:        #ffffff;
+  --nxs-bg-secondary:      #f6f8fa;
+  --nxs-bg-tertiary:       #eef0f3;
+  --nxs-bg-elevated:       #ffffff;
+  --nxs-bg-surface:        #f0f2f5;
+  --nxs-text-primary:      #1a1d23;
+  --nxs-text-secondary:    #4b5563;
+  --nxs-text-muted:        #9ca3af;
+  --nxs-text-inverse:      #ffffff;
+  --nxs-accent:            #6366f1;
+  --nxs-accent-hover:      #4f46e5;
+  --nxs-accent-light:      #eef2ff;
+  --nxs-accent-text:       #6366f1;
+  --nxs-border:            #e5e7eb;
+  --nxs-border-strong:     #d1d5db;
+  --nxs-shadow:            rgba(0,0,0,0.08);
+  --nxs-success:           #10b981;
+  --nxs-warning:           #f59e0b;
+  --nxs-danger:            #ef4444;
+  --nxs-info:              #3b82f6;
+  --nxs-sidebar-bg:        #ffffff;
+  --nxs-sidebar-text:      #374151;
+  --nxs-sidebar-active:    #6366f1;
+  --nxs-sidebar-active-bg: #eef2ff;
+  --nxs-card-bg:           #ffffff;
+  --nxs-input-bg:          #ffffff;
+  --nxs-input-border:      #d1d5db;
+  --nxs-button-bg:         #6366f1;
+  --nxs-button-text:       #ffffff;
+  --nxs-border-radius:     12px;
+  --nxs-button-radius:     8px;
+  --nxs-font-family:       system-ui, -apple-system, sans-serif;
+  --nxs-editor-font:       Georgia, serif;
+  --nxs-mono-font:         'Fira Code', monospace;
+  --nxs-font-size:         15px;
+  --nxs-line-height:       1.6;
+}
+
+/* Apply theme variables to global elements */
+body {
+  background-color: var(--nxs-bg-secondary);
+  color: var(--nxs-text-primary);
+  font-family: var(--nxs-font-family);
+  font-size: var(--nxs-font-size);
+}
+
+/* ── Non-light theme overrides ── */
+/* These override Tailwind utility classes when a non-light theme is active.
+   The light theme uses default Tailwind colors so no overrides are needed. */
+
+html:not([data-theme="light"]) {
+  /* Background overrides */
+  .bg-white            { background-color: var(--nxs-card-bg) !important; }
+  .bg-white\/90        { background-color: var(--nxs-card-bg) !important; opacity: 0.95; }
+  .bg-slate-50         { background-color: var(--nxs-bg-secondary) !important; }
+  .bg-slate-50\/40     { background-color: var(--nxs-bg-secondary) !important; }
+  .bg-slate-50\/60     { background-color: var(--nxs-bg-secondary) !important; }
+  .bg-slate-100        { background-color: var(--nxs-bg-tertiary) !important; }
+  .bg-slate-100\/60    { background-color: var(--nxs-bg-tertiary) !important; }
+  .bg-zinc-50          { background-color: var(--nxs-bg-secondary) !important; }
+  .bg-zinc-50\/40      { background-color: var(--nxs-bg-secondary) !important; }
+  .bg-zinc-100         { background-color: var(--nxs-bg-tertiary) !important; }
+
+  /* Text overrides */
+  .text-slate-900      { color: var(--nxs-text-primary) !important; }
+  .text-slate-800      { color: var(--nxs-text-primary) !important; }
+  .text-slate-700      { color: var(--nxs-text-secondary) !important; }
+  .text-slate-600      { color: var(--nxs-text-secondary) !important; }
+  .text-slate-500      { color: var(--nxs-text-muted) !important; }
+  .text-slate-400      { color: var(--nxs-text-muted) !important; }
+  .text-zinc-900       { color: var(--nxs-text-primary) !important; }
+  .text-zinc-800       { color: var(--nxs-text-primary) !important; }
+  .text-zinc-700       { color: var(--nxs-text-secondary) !important; }
+  .text-zinc-600       { color: var(--nxs-text-secondary) !important; }
+  .text-zinc-500       { color: var(--nxs-text-muted) !important; }
+  .text-zinc-400       { color: var(--nxs-text-muted) !important; }
+
+  /* Border overrides */
+  .border-slate-200    { border-color: var(--nxs-border) !important; }
+  .border-slate-100    { border-color: var(--nxs-border) !important; }
+  .border-zinc-200     { border-color: var(--nxs-border) !important; }
+  .border-zinc-100     { border-color: var(--nxs-border) !important; }
+
+  /* Divide lines */
+  .divide-slate-100 > * + *  { border-color: var(--nxs-border) !important; }
+  .divide-slate-50 > * + *   { border-color: var(--nxs-border) !important; }
+  .divide-zinc-100 > * + *   { border-color: var(--nxs-border) !important; }
+
+  /* Input elements */
+  input:not([type="color"]):not([type="range"]),
+  textarea,
+  select {
+    background-color: var(--nxs-input-bg) !important;
+    border-color: var(--nxs-input-border) !important;
+    color: var(--nxs-text-primary) !important;
+  }
+
+  /* Placeholder text */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--nxs-text-muted) !important;
+  }
+
+  /* Scrollbar styling for dark themes */
+  ::-webkit-scrollbar         { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track   { background: var(--nxs-bg-secondary); }
+  ::-webkit-scrollbar-thumb   { background: var(--nxs-border-strong); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--nxs-text-muted); }
+}
