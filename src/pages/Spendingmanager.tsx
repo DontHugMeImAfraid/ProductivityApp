@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useNexusStorage } from '@/hooks/useNexusStorage' 
 import {
   Wallet, Plus, Trash2, TrendingUp, TrendingDown, Search,
   ShoppingCart, Coffee, Car, Home, Utensils, Zap, Tag,
