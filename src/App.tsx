@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { Notes } from './pages/Notes';
-
 import { CalendarView } from './pages/Calendar';
 import { Settings } from './pages/Settings';
 import { Menu, Sparkles } from 'lucide-react';
@@ -11,12 +10,16 @@ import { Button } from './components/ui/Button';
 import { SpendingManager } from './pages/SpendingManager';
 import { cn } from './lib/utils';
 import { useAppStore } from './store';
-import { ThemeProvider } from './contexts/ThemeSystem'; // ← add this import
+import { ThemeProvider } from './contexts/ThemeSystem';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AuthPage from './pages/AuthPage';
 
-export default function App() {
+// ─── Inner app — only rendered when authenticated ─────────────────────────────
+
+function AppInner() {
+  const { cognitoUser, isLoading } = useAuth();
   const { currentView, setCurrentView, setSelectedNoteId } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [prevView, setPrevView] = useState(currentView);
   const [transitioning, setTransitioning] = useState(false);
   const [displayView, setDisplayView] = useState(currentView);
 
@@ -40,12 +43,27 @@ export default function App() {
     return () => clearTimeout(t);
   }, [currentView]);
 
+  // ── Loading spinner while Cognito restores session ──────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // ── Not authenticated → show login page ─────────────────────────────────────
+  if (!cognitoUser) {
+    return <AuthPage />;
+  }
+
+  // ── Authenticated app ────────────────────────────────────────────────────────
   const renderView = () => {
     switch (displayView) {
       case 'dashboard': return <Dashboard />;
       case 'tasks':     return <Tasks />;
       case 'notes':     return <Notes />;
-      case 'spending': return <SpendingManager />;
+      case 'spending':  return <SpendingManager />;
       case 'calendar':  return <CalendarView />;
       case 'settings':  return <Settings />;
       default:
@@ -59,7 +77,6 @@ export default function App() {
   };
 
   return (
-    <ThemeProvider>
     <div className="flex h-screen bg-slate-50 text-slate-950 font-sans overflow-hidden">
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
@@ -87,11 +104,7 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Mobile header */}
         <div className="md:hidden flex items-center justify-between p-4 border-b border-slate-200 bg-white">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMobileMenuOpen(true)}
-          >
+          <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)}>
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight text-slate-900">
@@ -104,18 +117,25 @@ export default function App() {
         </div>
 
         {/* Page with transition */}
-        <div
-          className={cn(
-            'flex-1 overflow-auto transition-all duration-200 ease-in-out',
-            transitioning
-              ? 'opacity-0 translate-y-1'
-              : 'opacity-100 translate-y-0'
-          )}
-        >
+        <div className={cn(
+          'flex-1 overflow-auto transition-all duration-200 ease-in-out',
+          transitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'
+        )}>
           {renderView()}
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Root — providers wrap everything ────────────────────────────────────────
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppInner />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

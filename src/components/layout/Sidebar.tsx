@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 import * as LucideIcons from 'lucide-react';
 import { useTheme, PRESET_THEMES } from '@/contexts/ThemeSystem';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
   currentView: string;
@@ -37,7 +38,7 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
   };
 
   const currentProfile = profiles.find(p => p.name === workspace) ?? profiles[0];
-
+  const { signOut } = useAuth();
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setProfileMenuOpen(false);
@@ -198,10 +199,12 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
               <button
                 onClick={() => {
                   setProfileMenuOpen(false);
-                  alert('Logout — connect your auth provider here.');
+                  
+                  signOut();
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
               >
+                
                 <LogOut className="w-4 h-4" />
                 Log out
               </button>
