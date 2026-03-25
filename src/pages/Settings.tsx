@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Status } from '@/types';
 import * as LucideIcons from 'lucide-react';
+import { ThemeSettings } from '@/components/ThemeSettings';
 
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -62,14 +63,12 @@ const StyledSelect = ({ value, onChange, children }: { value: string; onChange: 
 
 export function Settings() {
   const { settings, updateSettings, profiles, addProfile, updateProfile, deleteProfile, tasks, notes } = useAppStore();
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState('appearance');
   const [searchQuery, setSearchQuery] = useState('');
-  const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
-  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
 
   const tabs = [
-    { id: 'general',       label: 'General',         icon: SettingsIcon },
     { id: 'appearance',    label: 'Appearance',       icon: Palette },
+    { id: 'general',       label: 'General',          icon: SettingsIcon },
     { id: 'tasks',         label: 'Tasks & Projects', icon: CheckSquare },
     { id: 'calendar',      label: 'Calendar',         icon: Calendar },
     { id: 'profiles',      label: 'Profiles',         icon: User },
@@ -154,6 +153,43 @@ export function Settings() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 max-w-2xl">
 
+        {/* ══ APPEARANCE / THEME ══ */}
+        {activeTab === 'appearance' && (
+          <div className="space-y-2">
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-slate-900">Appearance</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Choose a theme and customise how Nexus looks.</p>
+            </div>
+            <ThemeSettings />
+
+            <div className="mt-6">
+              <SectionHeader title="Status Colors" />
+              <p className="text-sm text-slate-500 mb-4">Override colors for each task status column.</p>
+              {(['To Do', 'In Progress', 'In Review', 'Done'] as Status[]).map(status => (
+                <div key={status} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: settings.statusColors[status] ?? '#e4e4e7' }} />
+                    <span className="text-sm font-medium text-slate-900">{status}</span>
+                  </div>
+                  <input
+                    type="color"
+                    className="w-9 h-9 rounded-lg cursor-pointer border border-slate-200 p-0.5"
+                    value={settings.statusColors[status] ?? '#e4e4e7'}
+                    onChange={e => updateSettings({ statusColors: { ...settings.statusColors, [status]: e.target.value } })}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <SectionHeader title="Privacy" />
+              <SettingRow label="Cloak Mode" description="Blur sensitive content during screen sharing.">
+                <Toggle checked={settings.cloakMode ?? false} onChange={v => updateSettings({ cloakMode: v })} />
+              </SettingRow>
+            </div>
+          </div>
+        )}
+
         {/* ══ GENERAL ══ */}
         {activeTab === 'general' && (
           <div className="space-y-2">
@@ -215,33 +251,6 @@ export function Settings() {
             <SectionHeader title="Focus" />
             <SettingRow label="Nuclear Mode" description="Only deliver notifications from the current profile.">
               <Toggle checked={settings.nuclearMode ?? false} onChange={v => updateSettings({ nuclearMode: v })} />
-            </SettingRow>
-          </div>
-        )}
-
-        {/* ══ APPEARANCE ══ */}
-        {activeTab === 'appearance' && (
-          <div className="space-y-2">
-            <SectionHeader title="Status Colors" />
-            <p className="text-sm text-slate-500 mb-4">Customize the color for each task status.</p>
-            {(['To Do', 'In Progress', 'In Review', 'Done'] as Status[]).map(status => (
-              <div key={status} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: settings.statusColors[status] ?? '#e4e4e7' }} />
-                  <span className="text-sm font-medium text-slate-900">{status}</span>
-                </div>
-                <input
-                  type="color"
-                  className="w-9 h-9 rounded-lg cursor-pointer border border-slate-200 p-0.5"
-                  value={settings.statusColors[status] ?? '#e4e4e7'}
-                  onChange={e => updateSettings({ statusColors: { ...settings.statusColors, [status]: e.target.value } })}
-                />
-              </div>
-            ))}
-
-            <SectionHeader title="Privacy" />
-            <SettingRow label="Cloak Mode" description="Blur sensitive content during screen sharing.">
-              <Toggle checked={settings.cloakMode ?? false} onChange={v => updateSettings({ cloakMode: v })} />
             </SettingRow>
           </div>
         )}
@@ -370,7 +379,6 @@ export function Settings() {
                   </button>
                 </div>
 
-                {/* Color picker */}
                 <div>
                   <p className="text-xs text-slate-500 mb-2">Color</p>
                   <div className="flex gap-1.5 flex-wrap">
@@ -388,7 +396,6 @@ export function Settings() {
                   </div>
                 </div>
 
-                {/* Icon picker */}
                 <div>
                   <p className="text-xs text-slate-500 mb-2">Icon</p>
                   <div className="flex gap-1.5 flex-wrap">

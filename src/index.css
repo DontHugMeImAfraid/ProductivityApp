@@ -1,7 +1,10 @@
 @import "tailwindcss";
-/* ── Add this entire block to the bottom of src/index.css ── */
 
-/* Default CSS variable values (light theme) — overridden by ThemeContext at runtime */
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEXUS — Global CSS Variable Defaults (light theme baseline)
+   These are overridden at runtime by ThemeSystem.tsx via applyThemeToDom()
+═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
   --nxs-bg-primary:        #ffffff;
   --nxs-bg-secondary:      #f6f8fa;
@@ -27,6 +30,13 @@
   --nxs-sidebar-text:      #374151;
   --nxs-sidebar-active:    #6366f1;
   --nxs-sidebar-active-bg: #eef2ff;
+  --nxs-calendar-bg:       #ffffff;
+  --nxs-calendar-today:    #6366f1;
+  --nxs-calendar-event:    #6366f1;
+  --nxs-notes-bg:          #ffffff;
+  --nxs-editor-bg:         #ffffff;
+  --nxs-code-block-bg:     #1e2433;
+  --nxs-code-block-text:   #e2e8f0;
   --nxs-card-bg:           #ffffff;
   --nxs-input-bg:          #ffffff;
   --nxs-input-border:      #d1d5db;
@@ -34,6 +44,7 @@
   --nxs-button-text:       #ffffff;
   --nxs-border-radius:     12px;
   --nxs-button-radius:     8px;
+  --nxs-sidebar-width:     256px;
   --nxs-font-family:       system-ui, -apple-system, sans-serif;
   --nxs-editor-font:       Georgia, serif;
   --nxs-mono-font:         'Fira Code', monospace;
@@ -41,7 +52,7 @@
   --nxs-line-height:       1.6;
 }
 
-/* Apply theme variables to global elements */
+/* Apply global tokens */
 body {
   background-color: var(--nxs-bg-secondary);
   color: var(--nxs-text-primary);
@@ -49,64 +60,259 @@ body {
   font-size: var(--nxs-font-size);
 }
 
-/* ── Non-light theme overrides ── */
-/* These override Tailwind utility classes when a non-light theme is active.
-   The light theme uses default Tailwind colors so no overrides are needed. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   NON-LIGHT THEME OVERRIDES
+   These kick in for any theme that isn't 'light', mapping Tailwind utility
+   classes to the active CSS variables so every component recolors correctly.
+═══════════════════════════════════════════════════════════════════════════ */
 
 html:not([data-theme="light"]) {
-  /* Background overrides */
-  .bg-white            { background-color: var(--nxs-card-bg) !important; }
-  .bg-white\/90        { background-color: var(--nxs-card-bg) !important; opacity: 0.95; }
-  .bg-slate-50         { background-color: var(--nxs-bg-secondary) !important; }
-  .bg-slate-50\/40     { background-color: var(--nxs-bg-secondary) !important; }
-  .bg-slate-50\/60     { background-color: var(--nxs-bg-secondary) !important; }
-  .bg-slate-100        { background-color: var(--nxs-bg-tertiary) !important; }
-  .bg-slate-100\/60    { background-color: var(--nxs-bg-tertiary) !important; }
-  .bg-zinc-50          { background-color: var(--nxs-bg-secondary) !important; }
-  .bg-zinc-50\/40      { background-color: var(--nxs-bg-secondary) !important; }
-  .bg-zinc-100         { background-color: var(--nxs-bg-tertiary) !important; }
 
-  /* Text overrides */
-  .text-slate-900      { color: var(--nxs-text-primary) !important; }
-  .text-slate-800      { color: var(--nxs-text-primary) !important; }
-  .text-slate-700      { color: var(--nxs-text-secondary) !important; }
-  .text-slate-600      { color: var(--nxs-text-secondary) !important; }
-  .text-slate-500      { color: var(--nxs-text-muted) !important; }
-  .text-slate-400      { color: var(--nxs-text-muted) !important; }
-  .text-zinc-900       { color: var(--nxs-text-primary) !important; }
-  .text-zinc-800       { color: var(--nxs-text-primary) !important; }
-  .text-zinc-700       { color: var(--nxs-text-secondary) !important; }
-  .text-zinc-600       { color: var(--nxs-text-secondary) !important; }
-  .text-zinc-500       { color: var(--nxs-text-muted) !important; }
-  .text-zinc-400       { color: var(--nxs-text-muted) !important; }
+  /* ── Backgrounds ───────────────────────────────────────────────────────── */
+  .bg-white,
+  .bg-white\/90,
+  .bg-white\/80,
+  .bg-white\/60  { background-color: var(--nxs-card-bg) !important; }
 
-  /* Border overrides */
-  .border-slate-200    { border-color: var(--nxs-border) !important; }
-  .border-slate-100    { border-color: var(--nxs-border) !important; }
-  .border-zinc-200     { border-color: var(--nxs-border) !important; }
-  .border-zinc-100     { border-color: var(--nxs-border) !important; }
+  .bg-slate-50,
+  .bg-slate-50\/40,
+  .bg-slate-50\/60,
+  .bg-slate-50\/80,
+  .bg-zinc-50,
+  .bg-zinc-50\/40,
+  .bg-zinc-50\/50  { background-color: var(--nxs-bg-secondary) !important; }
+
+  .bg-slate-100,
+  .bg-slate-100\/60,
+  .bg-zinc-100,
+  .bg-zinc-100\/60  { background-color: var(--nxs-bg-tertiary) !important; }
+
+  /* Hover backgrounds — keep them slightly lighter than base */
+  .hover\:bg-slate-50:hover,
+  .hover\:bg-slate-100:hover,
+  .hover\:bg-white\/80:hover,
+  .hover\:bg-white\/60:hover  { background-color: var(--nxs-bg-tertiary) !important; }
+
+  .hover\:bg-slate-50\/60:hover,
+  .hover\:bg-slate-50\/50:hover  { background-color: var(--nxs-bg-secondary) !important; }
+
+  /* Group-hover variants */
+  .group-hover\/day\:bg-slate-50\/60,
+  .group-hover\/card\:opacity-100  { opacity: 1 !important; }
+
+  /* ── Text ───────────────────────────────────────────────────────────────── */
+  .text-slate-950,
+  .text-slate-900,
+  .text-slate-800,
+  .text-zinc-950,
+  .text-zinc-900,
+  .text-zinc-800  { color: var(--nxs-text-primary) !important; }
+
+  .text-slate-700,
+  .text-slate-600,
+  .text-zinc-700,
+  .text-zinc-600  { color: var(--nxs-text-secondary) !important; }
+
+  .text-slate-500,
+  .text-slate-400,
+  .text-slate-300,
+  .text-zinc-500,
+  .text-zinc-400,
+  .text-zinc-300  { color: var(--nxs-text-muted) !important; }
+
+  /* Placeholder text */
+  input::placeholder,
+  textarea::placeholder,
+  .placeholder-slate-400::placeholder,
+  .placeholder-slate-300::placeholder  { color: var(--nxs-text-muted) !important; }
+
+  /* ── Borders ────────────────────────────────────────────────────────────── */
+  .border-slate-50,
+  .border-slate-100,
+  .border-slate-200,
+  .border-zinc-50,
+  .border-zinc-100,
+  .border-zinc-200  { border-color: var(--nxs-border) !important; }
+
+  .border-slate-300,
+  .border-zinc-300  { border-color: var(--nxs-border-strong) !important; }
+
+  .hover\:border-slate-300:hover,
+  .hover\:border-slate-200:hover  { border-color: var(--nxs-border-strong) !important; }
 
   /* Divide lines */
-  .divide-slate-100 > * + *  { border-color: var(--nxs-border) !important; }
-  .divide-slate-50 > * + *   { border-color: var(--nxs-border) !important; }
-  .divide-zinc-100 > * + *   { border-color: var(--nxs-border) !important; }
+  .divide-slate-50 > * + *,
+  .divide-slate-100 > * + *,
+  .divide-zinc-50 > * + *,
+  .divide-zinc-100 > * + *  { border-color: var(--nxs-border) !important; }
 
-  /* Input elements */
-  input:not([type="color"]):not([type="range"]),
+  /* ── Form elements ──────────────────────────────────────────────────────── */
+  input:not([type="color"]):not([type="range"]):not([type="checkbox"]):not([type="radio"]),
   textarea,
-  select {
+  select  {
     background-color: var(--nxs-input-bg) !important;
     border-color: var(--nxs-input-border) !important;
     color: var(--nxs-text-primary) !important;
   }
 
-  /* Placeholder text */
-  input::placeholder,
-  textarea::placeholder {
+  /* Sticky headers (calendar, tables, etc.) */
+  .sticky  { background-color: var(--nxs-bg-secondary) !important; }
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  .shadow-sm   { box-shadow: 0 1px 3px var(--nxs-shadow) !important; }
+  .shadow-md   { box-shadow: 0 4px 12px var(--nxs-shadow) !important; }
+  .shadow-lg   { box-shadow: 0 8px 24px var(--nxs-shadow) !important; }
+  .shadow-xl   { box-shadow: 0 12px 32px var(--nxs-shadow) !important; }
+  .shadow-2xl  { box-shadow: 0 20px 48px var(--nxs-shadow) !important; }
+
+  /* ── Prose (notes markdown output) ─────────────────────────────────────── */
+  .prose,
+  .prose-zinc,
+  .gh-md  {
+    color: var(--nxs-text-primary) !important;
+  }
+
+  .prose h1, .prose h2, .prose h3,
+  .prose h4, .prose h5, .prose h6,
+  .gh-md h1, .gh-md h2, .gh-md h3,
+  .gh-md h4, .gh-md h5, .gh-md h6  { color: var(--nxs-text-primary) !important; }
+
+  .prose p, .prose li,
+  .gh-md p, .gh-md li  { color: var(--nxs-text-secondary) !important; }
+
+  .prose a, .gh-md a  { color: var(--nxs-accent-text) !important; }
+
+  .prose code,
+  .gh-md code:not(pre code)  {
+    background-color: var(--nxs-bg-tertiary) !important;
+    color: var(--nxs-text-primary) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  .prose pre, .gh-md pre  {
+    background-color: var(--nxs-code-block-bg) !important;
+    color: var(--nxs-code-block-text) !important;
+  }
+
+  .prose blockquote, .gh-md blockquote  {
+    border-left-color: var(--nxs-border-strong) !important;
     color: var(--nxs-text-muted) !important;
   }
 
-  /* Scrollbar styling for dark themes */
+  .prose table th, .gh-md table th  {
+    background-color: var(--nxs-bg-tertiary) !important;
+    color: var(--nxs-text-primary) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  .prose table td, .gh-md table td  {
+    border-color: var(--nxs-border) !important;
+    color: var(--nxs-text-secondary) !important;
+  }
+
+  .prose table tr:nth-child(2n) td,
+  .gh-md table tr:nth-child(2n) td  {
+    background-color: var(--nxs-bg-secondary) !important;
+  }
+
+  /* ── Note editor specific ───────────────────────────────────────────────── */
+
+  /* The CodeMirror editor already handles its own dark bg, keep it */
+  .cm-editor,
+  .cm-scroller  { background-color: var(--nxs-editor-bg) !important; }
+
+  /* Note preview area */
+  .note-preview-area  {
+    background-color: var(--nxs-notes-bg) !important;
+    color: var(--nxs-text-primary) !important;
+  }
+
+  /* Note sidebar */
+  .notes-sidebar  {
+    background-color: var(--nxs-bg-secondary) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  /* Note list items */
+  .note-list-item  {
+    color: var(--nxs-text-secondary) !important;
+  }
+
+  .note-list-item:hover,
+  .note-list-item.active  {
+    background-color: var(--nxs-accent-light) !important;
+    color: var(--nxs-accent-text) !important;
+  }
+
+  /* Section / folder headers in sidebar */
+  .notes-section-header  { color: var(--nxs-text-muted) !important; }
+
+  /* Frontmatter properties panel */
+  .frontmatter-panel  {
+    background-color: var(--nxs-bg-secondary) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  /* Pane tab bar */
+  .note-tab-bar  {
+    background-color: var(--nxs-bg-secondary) !important;
+    border-bottom-color: var(--nxs-border) !important;
+  }
+
+  .note-tab.active  {
+    background-color: var(--nxs-card-bg) !important;
+    color: var(--nxs-accent-text) !important;
+  }
+
+  .note-tab:not(.active)  {
+    color: var(--nxs-text-muted) !important;
+  }
+
+  /* ── Breadcrumbs & note header ──────────────────────────────────────────── */
+  .note-breadcrumb-area  {
+    background-color: var(--nxs-card-bg) !important;
+    border-bottom-color: var(--nxs-border) !important;
+  }
+
+  /* Context panel (right-side stats/links panel) */
+  .note-context-panel  {
+    background-color: var(--nxs-bg-secondary) !important;
+    border-left-color: var(--nxs-border) !important;
+  }
+
+  /* ── Notes Dashboard cards ─────────────────────────────────────────────── */
+  .note-dashboard-card  {
+    background-color: var(--nxs-card-bg) !important;
+    border-color: var(--nxs-border) !important;
+    color: var(--nxs-text-primary) !important;
+  }
+
+  .note-dashboard-card:hover  {
+    border-color: var(--nxs-accent) !important;
+  }
+
+  .note-template-card  {
+    background-color: var(--nxs-card-bg) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  .note-template-card:hover  {
+    border-color: var(--nxs-accent) !important;
+  }
+
+  /* ── Quick capture bar ──────────────────────────────────────────────────── */
+  .quick-capture-overlay  {
+    background-color: var(--nxs-card-bg) !important;
+    border-color: var(--nxs-border) !important;
+  }
+
+  /* ── Inline text editor (textarea mode) ────────────────────────────────── */
+  .note-textarea-editor  {
+    background-color: var(--nxs-editor-bg) !important;
+    color: var(--nxs-text-primary) !important;
+  }
+
+  /* Scrollbar styling */
   ::-webkit-scrollbar         { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track   { background: var(--nxs-bg-secondary); }
   ::-webkit-scrollbar-thumb   { background: var(--nxs-border-strong); border-radius: 3px; }

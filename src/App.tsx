@@ -3,13 +3,15 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { Notes } from './pages/Notes';
-import { SpendingManager } from './pages/SpendingManager';
+
 import { CalendarView } from './pages/Calendar';
 import { Settings } from './pages/Settings';
 import { Menu, Sparkles } from 'lucide-react';
 import { Button } from './components/ui/Button';
+import { SpendingManager } from './pages/SpendingManager';
 import { cn } from './lib/utils';
 import { useAppStore } from './store';
+import { ThemeProvider } from './contexts/ThemeSystem'; // ← add this import
 
 export default function App() {
   const { currentView, setCurrentView, setSelectedNoteId } = useAppStore();
@@ -57,6 +59,7 @@ export default function App() {
   };
 
   return (
+    <ThemeProvider>
     <div className="flex h-screen bg-slate-50 text-slate-950 font-sans overflow-hidden">
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
@@ -113,5 +116,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </ThemeProvider>
   );
 }

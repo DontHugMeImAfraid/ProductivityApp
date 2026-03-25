@@ -19,8 +19,9 @@ import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { NoteEditor } from '@/components/NoteEditor';
+import { useTheme } from '@/contexts/ThemeSystem';
 
-// ─── Layout types (inline — no separate file needed) ─────────────────────────
+// ─── Layout types ─────────────────────────────────────────────────────────────
 
 interface Tab { id: string; isPinned: boolean; isDirty: boolean; }
 interface Pane { id: string; tabs: Tab[]; activeTabId: string | null; scrollPos: number; }
@@ -113,7 +114,6 @@ function resizeSplit(l: Layout, leftPaneId: string, ratio: number): Layout {
 
 function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
   const { layout, activePaneId } = state;
-
   switch (action.type) {
     case 'OPEN': {
       const newLayout = updatePane(layout, action.paneId, p => {
@@ -127,7 +127,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
     case 'CLOSE_TAB': {
       const newLayout = updatePane(layout, action.paneId, p => {
         const tab = p.tabs.find(t => t.id === action.tabId);
-        if (tab?.isPinned) return p; // can't close pinned
+        if (tab?.isPinned) return p;
         const tabs = p.tabs.filter(t => t.id !== action.tabId);
         const nextActive = p.activeTabId === action.tabId
           ? (tabs[tabs.length - 1]?.id ?? null) : p.activeTabId;
@@ -151,13 +151,11 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       })};
     case 'SPLIT': {
       const newLayout = splitPane(layout, action.paneId, action.dir);
-      // Find the new pane (the one that didn't exist before)
       const oldPaneIds = new Set(allPanes(layout).map(p => p.id));
       const newPaneId  = allPanes(newLayout).find(p => !oldPaneIds.has(p.id))?.id ?? activePaneId;
       return { layout: newLayout, activePaneId: newPaneId };
     }
     case 'CLOSE_PANE': {
-      // Can't close last pane
       if (allPanes(layout).length <= 1) return state;
       const newLayout = closePane(layout, action.paneId);
       if (!newLayout) return state;
@@ -210,21 +208,22 @@ const TEMPLATES = [
     content: `# 💡 Idea: \n\n## The Problem\n\n## The Solution\n\n## Why It Matters\n\n## Next Steps\n- [ ] \n` },
 ];
 
-// ─── Confirmation Dialog ──────────────────────────────────────────────────────
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: {
   title: string; message: React.ReactNode; confirmLabel: string;
   onConfirm: () => void; onCancel: () => void;
 }) {
+  const { theme } = useTheme();
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+      <div className="rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}>
         <div className="p-6">
           <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center mb-4">
             <AlertTriangle className="w-5 h-5 text-red-500" />
           </div>
-          <h3 className="text-base font-semibold text-slate-900 mb-1">{title}</h3>
-          <div className="text-sm text-slate-500">{message}</div>
+          <h3 className="text-base font-semibold mb-1" style={{ color: theme.colors.textPrimary }}>{title}</h3>
+          <div className="text-sm" style={{ color: theme.colors.textSecondary }}>{message}</div>
         </div>
         <div className="px-6 pb-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
@@ -242,6 +241,7 @@ function QuickCaptureBar({ onClose, onCapture, sections }: {
   onCapture: (title: string, content?: string, sectionId?: string) => void;
   sections: NoteSection[];
 }) {
+  const { theme } = useTheme();
   const [title, setTitle] = useState('');
   const [body,  setBody]  = useState('');
   const [ok,    setOk]    = useState('');
@@ -261,47 +261,51 @@ function QuickCaptureBar({ onClose, onCapture, sections }: {
     setTimeout(onClose, 800);
   };
 
-  const SUGGESTIONS = [
-    'Meeting Notes', 'Idea: ', 'Standup ', 'Action Items',
-  ];
+  const SUGGESTIONS = ['Meeting Notes', 'Idea: ', 'Standup ', 'Action Items'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
-          <Zap className="w-4 h-4 text-violet-400 shrink-0" />
+      <div className="rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden quick-capture-overlay" style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
+          <Zap className="w-4 h-4 shrink-0" style={{ color: theme.colors.accent }} />
           <input ref={ref} value={title} onChange={e => setTitle(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) save(); if (e.key === 'Escape') onClose(); }}
             placeholder='Title · "Meeting notes" · "Idea in Meetings"'
-            className="flex-1 text-sm outline-none bg-transparent text-slate-900 placeholder-slate-400 font-medium" />
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+            style={{ background: 'transparent', color: theme.colors.textPrimary }}
+            className="flex-1 text-sm outline-none font-medium placeholder:opacity-50" />
+          <button onClick={onClose} style={{ color: theme.colors.textMuted }}><X className="w-4 h-4" /></button>
         </div>
         {ok ? (
-          <div className="px-4 py-3 text-sm font-medium text-emerald-600">{ok}</div>
+          <div className="px-4 py-3 text-sm font-medium" style={{ color: theme.colors.success }}>{ok}</div>
         ) : (
           <>
             <textarea value={body} onChange={e => setBody(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
               placeholder="Optional: start writing…" rows={3}
-              className="w-full px-4 py-3 text-sm text-slate-700 outline-none resize-none bg-slate-50/50 border-b border-slate-100 placeholder-slate-300" />
+              style={{ background: theme.colors.bgSecondary, color: theme.colors.textPrimary, borderBottom: `1px solid ${theme.colors.border}` }}
+              className="w-full px-4 py-3 text-sm outline-none resize-none placeholder:opacity-40" />
             <div className="p-2">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1">Quick create</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider px-2 mb-1" style={{ color: theme.colors.textMuted }}>Quick create</p>
               {SUGGESTIONS.map(s => (
                 <button key={s} onClick={() => setTitle(s)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-violet-50 hover:text-violet-700 transition-colors text-left">
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />{s}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-left transition-colors"
+                  style={{ color: theme.colors.textSecondary }}
+                  onMouseEnter={e => (e.currentTarget.style.background = theme.colors.bgTertiary)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.textMuted }} />{s}
                 </button>
               ))}
             </div>
           </>
         )}
-        <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between">
+        <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
           <div className="flex gap-3">
-            <span className="text-[10px] text-slate-300"><kbd className="bg-slate-100 px-1 rounded">Enter</kbd> create</span>
-            <span className="text-[10px] text-slate-300"><kbd className="bg-slate-100 px-1 rounded">Esc</kbd> close</span>
+            <span className="text-[10px]" style={{ color: theme.colors.textMuted }}><kbd className="px-1 rounded" style={{ background: theme.colors.bgTertiary }}>Enter</kbd> create</span>
+            <span className="text-[10px]" style={{ color: theme.colors.textMuted }}><kbd className="px-1 rounded" style={{ background: theme.colors.bgTertiary }}>Esc</kbd> close</span>
           </div>
           <button onClick={save} disabled={!title.trim()}
-            className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-40">
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
+            style={{ background: theme.colors.accent, color: theme.colors.buttonText }}>
             Create
           </button>
         </div>
@@ -317,6 +321,7 @@ function NotesDashboard({ notes, sections, pinnedIds, onOpenNote, onCreateNote, 
   onOpenNote: (id: string) => void; onCreateNote: (sectionId?: string) => void;
   onCreateFromTemplate: (tpl: typeof TEMPLATES[0]) => void; onTogglePin: (id: string) => void;
 }) {
+  const { theme } = useTheme();
   const recent = [...notes].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
   const pinned = notes.filter(n => pinnedIds.has(n.id));
 
@@ -326,78 +331,91 @@ function NotesDashboard({ notes, sections, pinnedIds, onOpenNote, onCreateNote, 
     const preview = extractPreview(note.content);
     return (
       <div onClick={() => onOpenNote(note.id)}
-        className="group p-3.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-violet-300 hover:shadow-sm transition-all">
+        className="note-dashboard-card group p-3.5 rounded-xl cursor-pointer transition-all"
+        style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = theme.colors.accent; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = theme.colors.border; }}
+      >
         <div className="flex items-start justify-between gap-2 mb-1.5">
-          <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-violet-700 transition-colors">{note.title}</p>
+          <p className="text-sm font-semibold truncate" style={{ color: theme.colors.textPrimary }}>{note.title}</p>
           <button onClick={e => { e.stopPropagation(); onTogglePin(note.id); }}
-            className={cn('shrink-0 w-5 h-5 rounded flex items-center justify-center transition-all opacity-0 group-hover:opacity-100',
-              pinnedIds.has(note.id) ? 'text-amber-500 opacity-100' : 'text-slate-300 hover:text-amber-400')}>
+            className="shrink-0 w-5 h-5 rounded flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+            style={{ color: pinnedIds.has(note.id) ? '#f59e0b' : theme.colors.textMuted }}>
             <Pin className="w-3 h-3" />
           </button>
         </div>
-        {preview && <p className="text-xs text-slate-400 leading-relaxed mb-2 line-clamp-2">{preview}</p>}
+        {preview && <p className="text-xs leading-relaxed mb-2 line-clamp-2" style={{ color: theme.colors.textMuted }}>{preview}</p>}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] text-slate-400 flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{timeAgo(note.updatedAt)}</span>
-          {section && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium flex items-center gap-1"><Folder className="w-2.5 h-2.5" />{section.name}</span>}
-          {tags.map(tag => <span key={tag} className="text-[10px] bg-violet-50 text-violet-500 px-1.5 py-0.5 rounded font-medium">{tag}</span>)}
+          <span className="text-[10px] flex items-center gap-1" style={{ color: theme.colors.textMuted }}><Clock className="w-2.5 h-2.5" />{timeAgo(note.updatedAt)}</span>
+          {section && <span className="text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-1" style={{ background: theme.colors.bgTertiary, color: theme.colors.textSecondary }}><Folder className="w-2.5 h-2.5" />{section.name}</span>}
+          {tags.map(tag => <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: theme.colors.accentLight, color: theme.colors.accentText }}>{tag}</span>)}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50/40">
+    <div className="flex-1 overflow-y-auto p-6 md:p-8" style={{ background: theme.colors.bgSecondary }}>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Notes</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{notes.length} note{notes.length !== 1 ? 's' : ''}</p>
+          <h2 className="text-xl font-bold" style={{ color: theme.colors.textPrimary }}>Notes</h2>
+          <p className="text-xs mt-0.5" style={{ color: theme.colors.textMuted }}>{notes.length} note{notes.length !== 1 ? 's' : ''}</p>
         </div>
         <Button size="sm" onClick={() => onCreateNote()}><Plus className="w-3.5 h-3.5 mr-1.5" />New Note</Button>
       </div>
+
       {pinned.length > 0 && (
         <section className="mb-7">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Pin className="w-3 h-3" />Pinned</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: theme.colors.textMuted }}><Pin className="w-3 h-3" />Pinned</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {pinned.map(n => <NoteCard key={n.id} note={n} />)}
           </div>
         </section>
       )}
+
       {recent.length > 0 && (
         <section className="mb-7">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Clock className="w-3 h-3" />Recent</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: theme.colors.textMuted }}><Clock className="w-3 h-3" />Recent</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {recent.map(n => <NoteCard key={n.id} note={n} />)}
           </div>
         </section>
       )}
+
       <section>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Layout className="w-3 h-3" />Templates</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: theme.colors.textMuted }}><Layout className="w-3 h-3" />Templates</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {TEMPLATES.map(tpl => {
             const Icon = tpl.icon;
             return (
               <button key={tpl.id} onClick={() => onCreateFromTemplate(tpl)}
-                className="group flex flex-col items-start gap-2 p-3.5 bg-white border border-slate-200 rounded-xl hover:border-violet-300 hover:shadow-sm transition-all text-left">
+                className="note-template-card group flex flex-col items-start gap-2 p-3.5 rounded-xl text-left transition-all"
+                style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = theme.colors.accent; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = theme.colors.border; }}
+              >
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: tpl.bg }}>
                   <Icon className="w-4 h-4" style={{ color: tpl.color }} />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-700 group-hover:text-violet-700 transition-colors">{tpl.label}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Use template</p>
+                  <p className="text-xs font-semibold" style={{ color: theme.colors.textPrimary }}>{tpl.label}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: theme.colors.textMuted }}>Use template</p>
                 </div>
               </button>
             );
           })}
         </div>
       </section>
+
       {notes.length === 0 && (
         <div className="mt-12 text-center">
-          <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-8 h-8 text-violet-300" />
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: theme.colors.accentLight }}>
+            <BookOpen className="w-8 h-8" style={{ color: theme.colors.accent, opacity: 0.6 }} />
           </div>
-          <p className="text-sm font-medium text-slate-500 mb-1">No notes yet</p>
-          <p className="text-xs text-slate-400 mb-4">Start with a template or create a blank note</p>
-          <button onClick={() => onCreateNote()} className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors">
+          <p className="text-sm font-medium mb-1" style={{ color: theme.colors.textSecondary }}>No notes yet</p>
+          <p className="text-xs mb-4" style={{ color: theme.colors.textMuted }}>Start with a template or create a blank note</p>
+          <button onClick={() => onCreateNote()} className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
+            style={{ background: theme.colors.accent, color: theme.colors.buttonText }}>
             Create first note
           </button>
         </div>
@@ -409,26 +427,18 @@ function NotesDashboard({ notes, sections, pinnedIds, onOpenNote, onCreateNote, 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
 
 interface TabBarProps {
-  pane: Pane;
-  notes: Note[];
-  isActive: boolean;
-  onActivate: () => void;
-  onOpen: (tabId: string) => void;
-  onClose: (tabId: string) => void;
-  onPin: (tabId: string) => void;
-  onReorder: (fromIdx: number, toIdx: number) => void;
-  onSplitH: () => void;
-  onSplitV: () => void;
-  onClosePane: () => void;
-  canClosePane: boolean;
-  onNew: () => void;
+  pane: Pane; notes: Note[]; isActive: boolean;
+  onActivate: () => void; onOpen: (tabId: string) => void; onClose: (tabId: string) => void;
+  onPin: (tabId: string) => void; onReorder: (fromIdx: number, toIdx: number) => void;
+  onSplitH: () => void; onSplitV: () => void; onClosePane: () => void;
+  canClosePane: boolean; onNew: () => void;
 }
 
 function TabBar({ pane, notes, isActive, onActivate, onOpen, onClose, onPin, onReorder, onSplitH, onSplitV, onClosePane, canClosePane, onNew }: TabBarProps) {
+  const { theme } = useTheme();
   const dragIdx = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
-  // Overflow: show max 6 tabs, rest in dropdown
   const MAX_VISIBLE = 6;
   const pinnedTabs  = pane.tabs.filter(t => t.isPinned);
   const normalTabs  = pane.tabs.filter(t => !t.isPinned);
@@ -440,55 +450,52 @@ function TabBar({ pane, notes, isActive, onActivate, onOpen, onClose, onPin, onR
   return (
     <div
       onClick={onActivate}
-      className={cn(
-        'flex items-stretch h-9 border-b bg-slate-50 shrink-0 overflow-hidden',
-        isActive ? 'border-slate-200' : 'border-slate-200 opacity-80',
-      )}
+      className="note-tab-bar flex items-stretch h-9 shrink-0 overflow-hidden"
+      style={{
+        background: theme.colors.bgSecondary,
+        borderBottom: `1px solid ${theme.colors.border}`,
+        outline: isActive ? `1px solid ${theme.colors.accent}30` : 'none',
+      }}
     >
-      {/* Pinned tabs (no close) + normal tabs */}
       <div className="flex items-end flex-1 overflow-hidden px-1 pt-1 gap-0 min-w-0">
         {visibleTabs.map((tab, idx) => {
           const note    = notes.find(n => n.id === tab.id);
           const isAct   = pane.activeTabId === tab.id;
-          const isDragTarget = dragOver === idx;
+          const isDragT = dragOver === idx;
           return (
             <div key={tab.id}
               draggable
               onDragStart={() => { dragIdx.current = idx; }}
               onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
               onDragLeave={() => setDragOver(null)}
-              onDrop={() => {
-                if (dragIdx.current !== null && dragIdx.current !== idx)
-                  onReorder(dragIdx.current, idx);
-                dragIdx.current = null; setDragOver(null);
-              }}
+              onDrop={() => { if (dragIdx.current !== null && dragIdx.current !== idx) onReorder(dragIdx.current, idx); dragIdx.current = null; setDragOver(null); }}
               onDragEnd={() => { dragIdx.current = null; setDragOver(null); }}
               onClick={e => { e.stopPropagation(); onOpen(tab.id); }}
-              className={cn(
-                'group flex items-center gap-1.5 px-2.5 py-1.5 max-w-[160px] min-w-0 rounded-t-lg text-xs font-medium cursor-pointer border border-b-0 select-none shrink-0 transition-all relative',
-                isAct
-                  ? 'bg-white border-slate-200 text-violet-700 -mb-px z-10 shadow-sm'
-                  : 'bg-transparent border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/60',
-                isDragTarget && 'border-l-2 border-l-violet-400',
-              )}
+              className={cn('note-tab group flex items-center gap-1.5 px-2.5 py-1.5 max-w-[160px] min-w-0 rounded-t-lg text-xs font-medium cursor-pointer select-none shrink-0 transition-all relative border border-b-0',
+                isAct ? 'active -mb-px z-10' : '',
+                isDragT ? 'border-l-2' : '')}
+              style={{
+                background: isAct ? theme.colors.cardBg : 'transparent',
+                borderColor: isAct ? theme.colors.border : 'transparent',
+                borderLeftColor: isDragT ? theme.colors.accent : undefined,
+                color: isAct ? theme.colors.accentText : theme.colors.textMuted,
+              }}
             >
-              {/* Drag handle */}
-              <GripVertical className="w-3 h-3 text-slate-300 shrink-0 opacity-0 group-hover:opacity-100 -ml-1 transition-opacity" />
-              <FileText className={cn('w-3 h-3 shrink-0', isAct ? 'text-violet-500' : 'text-slate-400')} />
+              <GripVertical className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 -ml-1 transition-opacity" style={{ color: theme.colors.textMuted }} />
+              <FileText className="w-3 h-3 shrink-0" style={{ color: isAct ? theme.colors.accent : theme.colors.textMuted }} />
               <span className="truncate">{note?.title ?? 'Untitled'}</span>
-              {/* Dirty dot */}
-              {tab.isDirty && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" title="Unsaved" />}
-              {/* Pin icon */}
-              {tab.isPinned && <Pin className="w-2.5 h-2.5 text-amber-400 shrink-0" />}
-              {/* Close / Pin buttons */}
+              {tab.isDirty && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: theme.colors.accent }} />}
+              {tab.isPinned && <Pin className="w-2.5 h-2.5 shrink-0" style={{ color: '#f59e0b' }} />}
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 shrink-0">
-                <button onClick={e => { e.stopPropagation(); onPin(tab.id); }} title={tab.isPinned ? 'Unpin' : 'Pin'}
-                  className="w-3.5 h-3.5 rounded flex items-center justify-center hover:bg-amber-50 text-slate-300 hover:text-amber-400 transition-colors">
+                <button onClick={e => { e.stopPropagation(); onPin(tab.id); }}
+                  className="w-3.5 h-3.5 rounded flex items-center justify-center transition-colors"
+                  style={{ color: theme.colors.textMuted }}>
                   <Pin className="w-2.5 h-2.5" />
                 </button>
                 {!tab.isPinned && (
                   <button onClick={e => { e.stopPropagation(); onClose(tab.id); }}
-                    className="w-3.5 h-3.5 rounded flex items-center justify-center hover:bg-red-50 text-slate-300 hover:text-red-400 transition-colors">
+                    className="w-3.5 h-3.5 rounded flex items-center justify-center transition-colors"
+                    style={{ color: theme.colors.textMuted }}>
                     <X className="w-2.5 h-2.5" />
                   </button>
                 )}
@@ -497,21 +504,24 @@ function TabBar({ pane, notes, isActive, onActivate, onOpen, onClose, onPin, onR
           );
         })}
 
-        {/* Overflow dropdown */}
         {overflow.length > 0 && (
           <div className="relative shrink-0">
             <button onClick={e => { e.stopPropagation(); setShowOverflow(v => !v); }}
-              className="flex items-center gap-1 px-2 py-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-white/60 rounded-t-lg transition-colors">
+              className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-t-lg transition-colors"
+              style={{ color: theme.colors.textMuted }}>
               +{overflow.length}
             </button>
             {showOverflow && (
-              <div className="absolute left-0 top-full z-30 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden w-48 mt-1">
+              <div className="absolute left-0 top-full z-30 rounded-xl shadow-lg overflow-hidden w-48 mt-1" style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}>
                 {overflow.map(tab => {
                   const note = notes.find(n => n.id === tab.id);
                   return (
                     <button key={tab.id} onClick={() => { onOpen(tab.id); setShowOverflow(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-violet-50 text-left">
-                      <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-colors"
+                      style={{ color: theme.colors.textSecondary }}
+                      onMouseEnter={e => (e.currentTarget.style.background = theme.colors.bgTertiary)}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.textMuted }} />
                       <span className="truncate">{note?.title ?? 'Untitled'}</span>
                     </button>
                   );
@@ -521,27 +531,26 @@ function TabBar({ pane, notes, isActive, onActivate, onOpen, onClose, onPin, onR
           </div>
         )}
 
-        {/* New tab button */}
         <button onClick={e => { e.stopPropagation(); onNew(); }}
-          className="flex items-center justify-center w-7 h-7 mt-0.5 rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors shrink-0 ml-0.5"
+          className="flex items-center justify-center w-7 h-7 mt-0.5 rounded transition-colors shrink-0 ml-0.5"
+          style={{ color: theme.colors.textMuted }}
           title="New note">
           <Plus className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Pane action buttons */}
-      <div className="flex items-center gap-0.5 px-2 shrink-0 border-l border-slate-200/60 ml-1">
+      <div className="flex items-center gap-0.5 px-2 shrink-0 ml-1" style={{ borderLeft: `1px solid ${theme.colors.border}` }}>
         <button onClick={e => { e.stopPropagation(); onSplitH(); }} title="Split right"
-          className="p-1 rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors">
+          className="p-1 rounded transition-colors" style={{ color: theme.colors.textMuted }}>
           <SplitSquareHorizontal className="w-3.5 h-3.5" />
         </button>
         <button onClick={e => { e.stopPropagation(); onSplitV(); }} title="Split down"
-          className="p-1 rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors">
+          className="p-1 rounded transition-colors" style={{ color: theme.colors.textMuted }}>
           <SplitSquareVertical className="w-3.5 h-3.5" />
         </button>
         {canClosePane && (
           <button onClick={e => { e.stopPropagation(); onClosePane(); }} title="Close pane"
-            className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+            className="p-1 rounded transition-colors" style={{ color: theme.colors.textMuted }}>
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -553,34 +562,28 @@ function TabBar({ pane, notes, isActive, onActivate, onOpen, onClose, onPin, onR
 // ─── Single Pane Editor ───────────────────────────────────────────────────────
 
 interface PaneEditorProps {
-  pane: Pane;
-  notes: Note[];
-  sections: NoteSection[];
+  pane: Pane; notes: Note[]; sections: NoteSection[];
   tasks: ReturnType<typeof useAppStore>['tasks'];
-  isActive: boolean;
-  pinnedIds: Set<string>;
-  showContextPanel: boolean;
-  canClosePane: boolean;
-  dispatch: React.Dispatch<LayoutAction>;
+  isActive: boolean; pinnedIds: Set<string>; showContextPanel: boolean;
+  canClosePane: boolean; dispatch: React.Dispatch<LayoutAction>;
   onCreateNote: (paneId: string, sectionId?: string) => void;
   updateNote: (id: string, updates: any) => void;
   onGoToTask: (taskId: string, projectId?: string) => void;
   onUnlinkTask: (noteId: string, taskId: string) => void;
-  onTogglePin: (noteId: string) => void;
-  onDeleteNote: (note: Note) => void;
-  onToggleContextPanel: () => void;
-  workspaceSections: NoteSection[];
+  onTogglePin: (noteId: string) => void; onDeleteNote: (note: Note) => void;
+  onToggleContextPanel: () => void; workspaceSections: NoteSection[];
   onBackToDashboard: () => void;
   getUniqueName: (base: string, sectionId: string | undefined, excludeId?: string) => string;
 }
 
 function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showContextPanel, canClosePane, dispatch,
   onCreateNote, updateNote, onGoToTask, onUnlinkTask, onTogglePin, onDeleteNote, onToggleContextPanel, workspaceSections, onBackToDashboard, getUniqueName }: PaneEditorProps) {
+  const { theme } = useTheme();
   const note = notes.find(n => n.id === pane.activeTabId);
-  const [isEditing,       setIsEditing]       = useState(false);
-  const [isEditingTitle,  setIsEditingTitle]  = useState(false);
-  const [editTitleVal,    setEditTitleVal]    = useState('');
-  const [selection,       setSelection]       = useState<{ text: string; x: number; y: number } | null>(null);
+  const [isEditing,      setIsEditing]      = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleVal,   setEditTitleVal]   = useState('');
+  const [selection,      setSelection]      = useState<{ text: string; x: number; y: number } | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -611,18 +614,16 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
     setIsEditingTitle(false);
   };
 
-  const handleUnlinkTask = (taskId: string) => {
-    if (!note) return;
-    onUnlinkTask(note.id, taskId);
-  };
+  const handleUnlinkTask = (taskId: string) => { if (note) onUnlinkTask(note.id, taskId); };
 
   if (!note) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
+      <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: theme.colors.textMuted }}>
         <FileText className="w-10 h-10 opacity-20" />
         <p className="text-sm">No note open</p>
         <button onClick={() => onCreateNote(pane.id)}
-          className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors flex items-center gap-1.5">
+          className="px-3 py-1.5 text-xs font-medium rounded-lg flex items-center gap-1.5"
+          style={{ background: theme.colors.accent, color: theme.colors.buttonText }}>
           <Plus className="w-3.5 h-3.5" /> New note
         </button>
       </div>
@@ -634,16 +635,16 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
   return (
     <div className="flex flex-1 min-h-0 min-w-0">
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
-        {/* Breadcrumbs + toolbar */}
-        <div className="px-5 pt-3.5 pb-0 border-b border-slate-100 bg-white shrink-0">
-          <nav className="flex items-center gap-1 text-xs text-slate-400 mb-2.5 font-medium">
-            <button onClick={onBackToDashboard} className="hover:text-violet-600 transition-colors">Notes</button>
+        {/* Header */}
+        <div className="note-breadcrumb-area px-5 pt-3.5 pb-0 shrink-0" style={{ background: theme.colors.cardBg, borderBottom: `1px solid ${theme.colors.border}` }}>
+          <nav className="flex items-center gap-1 text-xs mb-2.5 font-medium" style={{ color: theme.colors.textMuted }}>
+            <button onClick={onBackToDashboard} className="transition-colors hover:opacity-80" style={{ color: theme.colors.textMuted }}>Notes</button>
             {section && <>
-              <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />
-              <span className="text-slate-500">{section.name}</span>
+              <ChevronRight className="w-3 h-3 shrink-0" style={{ color: theme.colors.border }} />
+              <span style={{ color: theme.colors.textSecondary }}>{section.name}</span>
             </>}
-            <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />
-            <span className="text-slate-700 font-semibold truncate max-w-[180px]">{note.title}</span>
+            <ChevronRight className="w-3 h-3 shrink-0" style={{ color: theme.colors.border }} />
+            <span className="font-semibold truncate max-w-[180px]" style={{ color: theme.colors.textPrimary }}>{note.title}</span>
           </nav>
 
           <div className="flex items-start justify-between gap-4 pb-3">
@@ -652,34 +653,40 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
                 <input autoFocus value={editTitleVal} onChange={e => setEditTitleVal(e.target.value)}
                   onBlur={handleTitleSave}
                   onKeyDown={e => { if (e.key === 'Enter') handleTitleSave(); if (e.key === 'Escape') setIsEditingTitle(false); }}
-                  className="text-lg md:text-xl font-bold text-slate-900 border-b-2 border-violet-400 outline-none bg-transparent w-full pb-0.5" />
+                  className="text-lg md:text-xl font-bold outline-none bg-transparent w-full pb-0.5"
+                  style={{ color: theme.colors.textPrimary, borderBottom: `2px solid ${theme.colors.accent}` }} />
               ) : (
-                <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate cursor-text hover:bg-violet-50 rounded px-1 -ml-1 py-0.5 transition-colors"
+                <h1 className="text-lg md:text-xl font-bold truncate cursor-text rounded px-1 -ml-1 py-0.5 transition-colors"
+                  style={{ color: theme.colors.textPrimary }}
                   onDoubleClick={() => { setIsEditingTitle(true); setEditTitleVal(note.title); }}>
                   {note.title}
                 </h1>
               )}
-              <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-2 mt-1 text-xs" style={{ color: theme.colors.textMuted }}>
                 <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3" />{format(note.updatedAt, 'MMM d, h:mm a')}</span>
-                {section && <span className="flex items-center gap-1 bg-violet-50 text-violet-600 px-2 py-0.5 rounded-md font-medium"><Folder className="w-3 h-3" />{section.name}</span>}
-                {linkedTasks.length > 0 && <span className="flex items-center gap-1 bg-violet-50 text-violet-500 px-2 py-0.5 rounded-full font-medium"><LinkIcon className="w-3 h-3" />{linkedTasks.length} task{linkedTasks.length !== 1 ? 's' : ''}</span>}
+                {section && <span className="flex items-center gap-1 px-2 py-0.5 rounded-md font-medium" style={{ background: theme.colors.accentLight, color: theme.colors.accentText }}><Folder className="w-3 h-3" />{section.name}</span>}
+                {linkedTasks.length > 0 && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full font-medium" style={{ background: theme.colors.accentLight, color: theme.colors.accentText }}><LinkIcon className="w-3 h-3" />{linkedTasks.length} task{linkedTasks.length !== 1 ? 's' : ''}</span>}
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => onTogglePin(note.id)} title={pinnedIds.has(note.id) ? 'Unpin' : 'Pin'}
-                className={cn('p-1.5 rounded-lg transition-all', pinnedIds.has(note.id) ? 'text-amber-500 bg-amber-50' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50')}>
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: pinnedIds.has(note.id) ? '#f59e0b' : theme.colors.textMuted, background: pinnedIds.has(note.id) ? '#fffbeb' : 'transparent' }}>
                 <Pin className="w-4 h-4" />
               </button>
-              <button onClick={onToggleContextPanel} title="Context panel"
-                className={cn('p-1.5 rounded-lg transition-all', showContextPanel ? 'text-violet-600 bg-violet-50' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50')}>
+              <button onClick={onToggleContextPanel}
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: showContextPanel ? theme.colors.accent : theme.colors.textMuted, background: showContextPanel ? theme.colors.accentLight : 'transparent' }}>
                 <PanelRight className="w-4 h-4" />
               </button>
-              <button onClick={() => onDeleteNote(note)} title="Delete"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
+              <button onClick={() => onDeleteNote(note)}
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: theme.colors.textMuted }}>
                 <Trash2 className="w-4 h-4" />
               </button>
               <Button size="sm" variant={isEditing ? 'default' : 'outline'}
-                className={cn('h-8 text-xs ml-1', isEditing && 'bg-violet-600 hover:bg-violet-700 text-white')}
+                className={cn('h-8 text-xs ml-1', isEditing && 'text-white')}
+                style={isEditing ? { background: theme.colors.accent } : {}}
                 onClick={() => setIsEditing(!isEditing)}>
                 {isEditing ? 'Preview' : 'Edit'}
               </Button>
@@ -687,23 +694,26 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
           </div>
         </div>
 
-        {/* Linked tasks */}
+        {/* Linked tasks bar */}
         {linkedTasks.length > 0 && (
-          <div className="px-5 py-2.5 border-b border-slate-100 bg-violet-50/40 flex items-center gap-2 flex-wrap shrink-0">
-            <CheckSquare className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+          <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap shrink-0" style={{ background: theme.colors.accentLight, borderBottom: `1px solid ${theme.colors.border}` }}>
+            <CheckSquare className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} />
             {linkedTasks.map(t => (
-              <div key={t.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-violet-200 rounded-full text-xs text-violet-700 group">
+              <div key={t.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs group"
+                style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}`, color: theme.colors.accentText }}>
                 <button onClick={() => onGoToTask(t.id, t.projectId)} className="hover:underline">{t.title}</button>
-                <button onClick={() => handleUnlinkTask(t.id)} className="opacity-0 group-hover:opacity-100 text-violet-400 hover:text-red-500 transition-all"><X className="w-3 h-3" /></button>
+                <button onClick={() => handleUnlinkTask(t.id)} className="opacity-0 group-hover:opacity-100 transition-all" style={{ color: theme.colors.textMuted }}><X className="w-3 h-3" /></button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Editor */}
-        <div ref={editorRef} className="flex-1 overflow-y-auto relative bg-slate-50/20">
+        {/* Editor area */}
+        <div ref={editorRef} className="flex-1 overflow-y-auto relative" style={{ background: theme.colors.bgSecondary }}>
           {isEditing ? (
-            <textarea className="w-full h-full min-h-full p-5 md:p-7 text-sm text-slate-800 bg-white/90 resize-none outline-none font-mono leading-relaxed"
+            <textarea
+              className="note-textarea-editor w-full h-full min-h-full p-5 md:p-7 text-sm resize-none outline-none font-mono leading-relaxed"
+              style={{ background: theme.colors.editorBg, color: theme.colors.textPrimary, minHeight: '100%' }}
               value={note.content}
               onChange={e => {
                 updateNote(note.id, { content: e.target.value });
@@ -711,36 +721,37 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
               }}
               onBlur={() => dispatch({ type: 'MARK_CLEAN', noteId: note.id })}
               placeholder="Start writing…"
-              style={{ minHeight: '100%' }} />
+            />
           ) : (
-            <div className="p-5 md:p-9 bg-white min-h-full shadow-sm">
+            <div className="note-preview-area p-5 md:p-9 min-h-full shadow-sm" style={{ background: theme.colors.cardBg }}>
               <NoteEditor content={note.content} isEditing={false} setIsEditing={setIsEditing}
                 onChange={content => { updateNote(note.id, { content }); dispatch({ type: 'MARK_DIRTY', noteId: note.id }); }} />
             </div>
           )}
 
-          {/* Smart text selection tooltip */}
           {selection && (
-            <div className="fixed z-40 bg-slate-900 text-white rounded-xl shadow-2xl overflow-hidden flex"
-              style={{ left: Math.min(selection.x - 90, window.innerWidth - 300), top: selection.y - 48, transform: 'translateY(-100%)' }}>
+            <div className="fixed z-40 rounded-xl shadow-2xl overflow-hidden flex"
+              style={{ left: Math.min(selection.x - 90, window.innerWidth - 300), top: selection.y - 48, transform: 'translateY(-100%)', background: theme.colors.bgTertiary, border: `1px solid ${theme.colors.border}` }}>
               <button onClick={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="px-3 py-2 text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5 border-r border-white/10">
-                <CheckSquare className="w-3 h-3 text-violet-300" /> Create task
+                className="px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5"
+                style={{ color: theme.colors.textSecondary, borderRight: `1px solid ${theme.colors.border}` }}>
+                <CheckSquare className="w-3 h-3" style={{ color: theme.colors.accent }} /> Create task
               </button>
               <button onClick={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="px-3 py-2 text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5 border-r border-white/10">
-                <CalendarIcon className="w-3 h-3 text-blue-300" /> Schedule
+                className="px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5"
+                style={{ color: theme.colors.textSecondary, borderRight: `1px solid ${theme.colors.border}` }}>
+                <CalendarIcon className="w-3 h-3" style={{ color: theme.colors.info }} /> Schedule
               </button>
               <button onClick={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="px-3 py-2 text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5">
-                <DollarSign className="w-3 h-3 text-emerald-300" /> Log transaction
+                className="px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5"
+                style={{ color: theme.colors.textSecondary }}>
+                <DollarSign className="w-3 h-3" style={{ color: theme.colors.success }} /> Log transaction
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Context panel */}
       {showContextPanel && (
         <ContextPanel note={note} tasks={tasks}
           onGoToTask={onGoToTask} onUnlinkTask={handleUnlinkTask}
@@ -756,30 +767,35 @@ function ContextPanel({ note, tasks, onGoToTask, onUnlinkTask, onClose }: {
   note: Note; tasks: any[]; onGoToTask: (id: string, pid?: string) => void;
   onUnlinkTask: (taskId: string) => void; onClose: () => void;
 }) {
+  const { theme } = useTheme();
   const linked = tasks.filter(t => (note.linkedTaskIds ?? []).includes(t.id));
   const tags   = extractTags(note.content);
   const money  = [...new Set((note.content.match(/£[\d,]+(?:\.\d{2})?/g) ?? []).slice(0, 5))];
   const words  = note.content.trim().split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="w-56 shrink-0 border-l border-slate-200 bg-slate-50/60 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Context</span>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><PanelRightClose className="w-4 h-4" /></button>
+    <div className="note-context-panel w-56 shrink-0 flex flex-col overflow-hidden"
+      style={{ background: theme.colors.bgSecondary, borderLeft: `1px solid ${theme.colors.border}` }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: theme.colors.textMuted }}>Context</span>
+        <button onClick={onClose} className="transition-colors" style={{ color: theme.colors.textMuted }}><PanelRightClose className="w-4 h-4" /></button>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {linked.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><CheckSquare className="w-3 h-3" />Linked Tasks</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: theme.colors.textMuted }}><CheckSquare className="w-3 h-3" />Linked Tasks</p>
             <div className="space-y-1.5">
               {linked.map(t => (
-                <div key={t.id} className="group flex items-start gap-2 p-2 bg-white rounded-lg border border-slate-200 hover:border-violet-200 transition-colors">
-                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-violet-400" />
+                <div key={t.id} className="group flex items-start gap-2 p-2 rounded-lg transition-colors"
+                  style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = theme.colors.accent)}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = theme.colors.border)}>
+                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: theme.colors.accent }} />
                   <div className="flex-1 min-w-0">
-                    <button onClick={() => onGoToTask(t.id, t.projectId)} className="text-xs font-medium text-slate-700 hover:text-violet-600 text-left truncate block w-full">{t.title}</button>
-                    <span className="text-[10px] text-slate-400 capitalize">{t.status}</span>
+                    <button onClick={() => onGoToTask(t.id, t.projectId)} className="text-xs font-medium text-left truncate block w-full hover:underline" style={{ color: theme.colors.textSecondary }}>{t.title}</button>
+                    <span className="text-[10px] capitalize" style={{ color: theme.colors.textMuted }}>{t.status}</span>
                   </div>
-                  <button onClick={() => onUnlinkTask(t.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all shrink-0"><X className="w-3 h-3" /></button>
+                  <button onClick={() => onUnlinkTask(t.id)} className="opacity-0 group-hover:opacity-100 transition-all shrink-0" style={{ color: theme.colors.textMuted }}><X className="w-3 h-3" /></button>
                 </div>
               ))}
             </div>
@@ -787,26 +803,26 @@ function ContextPanel({ note, tasks, onGoToTask, onUnlinkTask, onClose }: {
         )}
         {money.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><DollarSign className="w-3 h-3" />Amounts</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: theme.colors.textMuted }}><DollarSign className="w-3 h-3" />Amounts</p>
             <div className="flex flex-wrap gap-1.5">
-              {money.map(m => <span key={m} className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg">{m}</span>)}
+              {money.map(m => <span key={m} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: `${theme.colors.success}20`, color: theme.colors.success }}>{m}</span>)}
             </div>
           </div>
         )}
         {tags.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Hash className="w-3 h-3" />Tags</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: theme.colors.textMuted }}><Hash className="w-3 h-3" />Tags</p>
             <div className="flex flex-wrap gap-1.5">
-              {tags.map(tag => <span key={tag} className="text-[10px] font-medium bg-violet-50 text-violet-600 px-2 py-1 rounded-full">{tag}</span>)}
+              {tags.map(tag => <span key={tag} className="text-[10px] font-medium px-2 py-1 rounded-full" style={{ background: theme.colors.accentLight, color: theme.colors.accentText }}>{tag}</span>)}
             </div>
           </div>
         )}
         <div>
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Sparkles className="w-3 h-3" />Stats</p>
-          <div className="space-y-1 text-xs text-slate-500">
-            <div className="flex justify-between"><span>Words</span><span className="font-medium text-slate-700">{words}</span></div>
-            <div className="flex justify-between"><span>Characters</span><span className="font-medium text-slate-700">{note.content.length}</span></div>
-            <div className="flex justify-between"><span>Modified</span><span className="font-medium text-slate-700">{timeAgo(note.updatedAt)}</span></div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: theme.colors.textMuted }}><Sparkles className="w-3 h-3" />Stats</p>
+          <div className="space-y-1 text-xs" style={{ color: theme.colors.textSecondary }}>
+            <div className="flex justify-between"><span>Words</span><span className="font-medium" style={{ color: theme.colors.textPrimary }}>{words}</span></div>
+            <div className="flex justify-between"><span>Characters</span><span className="font-medium" style={{ color: theme.colors.textPrimary }}>{note.content.length}</span></div>
+            <div className="flex justify-between"><span>Modified</span><span className="font-medium" style={{ color: theme.colors.textPrimary }}>{timeAgo(note.updatedAt)}</span></div>
           </div>
         </div>
       </div>
@@ -817,30 +833,23 @@ function ContextPanel({ note, tasks, onGoToTask, onUnlinkTask, onClose }: {
 // ─── Recursive layout renderer ────────────────────────────────────────────────
 
 interface LayoutRendererProps {
-  layout: Layout;
-  activePaneId: string;
-  notes: Note[];
-  sections: NoteSection[];
-  tasks: any[];
-  pinnedIds: Set<string>;
-  showContextPanelFor: string | null;
+  layout: Layout; activePaneId: string; notes: Note[]; sections: NoteSection[];
+  tasks: any[]; pinnedIds: Set<string>; showContextPanelFor: string | null;
   dispatch: React.Dispatch<LayoutAction>;
   onCreateNote: (paneId: string, sectionId?: string) => void;
   updateNote: (id: string, updates: any) => void;
   onGoToTask: (taskId: string, projectId?: string) => void;
   onUnlinkTask: (noteId: string, taskId: string) => void;
-  onTogglePin: (noteId: string) => void;
-  onDeleteNote: (note: Note) => void;
-  toggleContextPanel: (paneId: string) => void;
-  totalPanes: number;
-  workspaceSections: NoteSection[];
-  onBackToDashboard: (paneId: string) => void;
+  onTogglePin: (noteId: string) => void; onDeleteNote: (note: Note) => void;
+  toggleContextPanel: (paneId: string) => void; totalPanes: number;
+  workspaceSections: NoteSection[]; onBackToDashboard: (paneId: string) => void;
   getUniqueName: (base: string, sectionId: string | undefined, excludeId?: string) => string;
   allNotes: Note[];
 }
 
 function LayoutRenderer(props: LayoutRendererProps) {
   const { layout, activePaneId, dispatch, totalPanes } = props;
+  const { theme } = useTheme();
 
   if (layout.type === 'leaf') {
     const { pane } = layout;
@@ -848,7 +857,8 @@ function LayoutRenderer(props: LayoutRendererProps) {
     const showCtx  = props.showContextPanelFor === pane.id;
 
     return (
-      <div className={cn('flex flex-col min-h-0 min-w-0 h-full', isActive && 'ring-1 ring-inset ring-violet-200')}
+      <div className={cn('flex flex-col min-h-0 min-w-0 h-full')}
+        style={{ outline: isActive ? `1px solid ${theme.colors.accent}30` : 'none' }}
         onClick={() => dispatch({ type: 'SET_ACTIVE_PANE', paneId: pane.id })}>
         <TabBar
           pane={pane} notes={props.allNotes} isActive={isActive}
@@ -878,7 +888,6 @@ function LayoutRenderer(props: LayoutRendererProps) {
     );
   }
 
-  // Split node — resizable divider
   const splitRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -907,21 +916,13 @@ function LayoutRenderer(props: LayoutRendererProps) {
       <div style={isH ? { width: `${pct}%` } : { height: `${pct}%` }} className="min-w-0 min-h-0 overflow-hidden">
         <LayoutRenderer {...props} layout={layout.left} />
       </div>
-
-      {/* Resizable divider */}
       <div onMouseDown={startResize}
-        className={cn(
-          'shrink-0 relative group z-10',
-          isH ? 'w-1 cursor-col-resize hover:w-1.5 bg-slate-200 hover:bg-violet-400' : 'h-1 cursor-row-resize hover:h-1.5 bg-slate-200 hover:bg-violet-400',
-          'transition-all duration-100',
-        )}>
-        {/* Grab indicator */}
-        <div className={cn('absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity',
-          isH ? 'flex-col' : 'flex-row')}>
-          <div className={cn('rounded-full bg-violet-500', isH ? 'w-1 h-8' : 'h-1 w-8')} />
-        </div>
-      </div>
-
+        className={cn('shrink-0 relative group z-10 transition-colors',
+          isH ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize')}
+        style={{ background: theme.colors.border }}
+        onMouseEnter={e => (e.currentTarget.style.background = theme.colors.accent)}
+        onMouseLeave={e => (e.currentTarget.style.background = theme.colors.border)}
+      />
       <div style={isH ? { width: `${100 - pct}%` } : { height: `${100 - pct}%` }} className="min-w-0 min-h-0 overflow-hidden">
         <LayoutRenderer {...props} layout={layout.right} />
       </div>
@@ -938,8 +939,8 @@ export function Notes() {
     addNoteSection, deleteNoteSection, tasks, updateTask,
     setSelectedTaskId, setCurrentView, setSelectedProjectId,
   } = useAppStore();
+  const { theme } = useTheme();
 
-  // Layout state — single pane to start
   const initPane = useMemo(() => makePane(), []);
   const [ls, dispatch] = useReducer(layoutReducer, {
     layout: makeLeaf(initPane),
@@ -963,7 +964,6 @@ export function Notes() {
   const [pinnedIds,         setPinnedIds]         = useState<Set<string>>(new Set());
   const [showCtxPanelFor,   setShowCtxPanelFor]   = useState<string|null>(null);
   const [showQuickCapture,  setShowQuickCapture]  = useState(false);
-  // Dashboard mode — show home when no active note in any pane
   const [showDashboard,     setShowDashboard]     = useState(false);
 
   const workspaceNotes    = useMemo(() => notes.filter(n => n.workspace === workspace), [notes, workspace]);
@@ -984,19 +984,16 @@ export function Notes() {
   const totalPanes = panes.length;
   const activePane = panes.find(p => p.id === ls.activePaneId) ?? panes[0];
 
-  // Sync selectedNoteId with active pane
   useEffect(() => {
     if (activePane?.activeTabId) setSelectedNoteId(activePane.activeTabId);
   }, [activePane?.activeTabId, setSelectedNoteId]);
 
-  // Open selectedNoteId from store into active pane (handles external navigation)
   useEffect(() => {
     if (selectedNoteId && activePane && !activePane.tabs.find(t => t.id === selectedNoteId)) {
       dispatch({ type: 'OPEN', paneId: activePane.id, noteId: selectedNoteId });
     }
-  }, [selectedNoteId]); // eslint-disable-line
+  }, [selectedNoteId]);
 
-  // Global effects
   useEffect(() => {
     if (!contextMenu && !folderMenu) return;
     const h = () => { setContextMenu(null); setFolderMenu(null); };
@@ -1007,7 +1004,6 @@ export function Notes() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setContextMenu(null); setFolderMenu(null); }
-      // Ctrl+Tab: next tab in active pane
       if ((e.ctrlKey || e.metaKey) && e.key === 'Tab' && activePane) {
         e.preventDefault();
         const tabs = activePane.tabs;
@@ -1016,12 +1012,10 @@ export function Notes() {
         const next = tabs[(idx + 1) % tabs.length];
         dispatch({ type: 'ACTIVATE', paneId: activePane.id, tabId: next.id });
       }
-      // Ctrl+W: close active tab
       if ((e.ctrlKey || e.metaKey) && e.key === 'w' && activePane?.activeTabId) {
         e.preventDefault();
         dispatch({ type: 'CLOSE_TAB', paneId: activePane.id, tabId: activePane.activeTabId });
       }
-      // Ctrl+N
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); setShowQuickCapture(true); }
     };
     document.addEventListener('keydown', h);
@@ -1037,7 +1031,6 @@ export function Notes() {
     return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
   }, [isDraggingBar]);
 
-  // Helpers
   const getUniqueName = useCallback((baseName: string, sectionId: string|undefined, excludeId?: string) => {
     const existing = new Set(workspaceNotes.filter(n => n.sectionId === sectionId && n.id !== excludeId).map(n => n.title));
     if (!existing.has(baseName)) return baseName;
@@ -1109,11 +1102,7 @@ export function Notes() {
   const toggleSection    = (id: string) => setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
   const isSectionExpanded = (id: string) => expandedSections[id] !== false;
 
-  // Whether to show the home dashboard
-  const showHome = showDashboard || !activePane?.activeTabId;
-
-  // ── Note list item ──────────────────────────────────────────────────────
-
+  // ── Note list item ──────────────────────────────────────────────────────────
   const renderNoteItem = (note: Note, index: number, provided?: any, snapshot?: any) => {
     const isSelected  = !!panes.some(p => p.activeTabId === note.id);
     const isRenaming  = renamingNoteId === note.id;
@@ -1132,66 +1121,88 @@ export function Notes() {
         key={note.id}
         onClick={() => openNoteInActivePane(note.id)}
         onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }}
-        className={cn(
-          'group flex flex-col gap-0.5 px-3 py-2.5 rounded-xl cursor-pointer select-none transition-[background-color,box-shadow] duration-150',
-          isSelected && !snapshot?.isDragging ? 'bg-violet-100 text-violet-800 shadow-sm ring-1 ring-violet-200/60' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-          snapshot?.isDragging && 'bg-white shadow-lg ring-2 ring-violet-400 ring-offset-1 text-violet-700'
-        )}>
+        className="note-list-item group flex flex-col gap-0.5 px-3 py-2.5 rounded-xl cursor-pointer select-none transition-all"
+        style={{
+          background: isSelected && !snapshot?.isDragging ? theme.colors.accentLight : snapshot?.isDragging ? theme.colors.cardBg : 'transparent',
+          color: isSelected ? theme.colors.accentText : theme.colors.textSecondary,
+          outline: snapshot?.isDragging ? `2px solid ${theme.colors.accent}` : 'none',
+        }}
+        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = theme.colors.bgTertiary; }}
+        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <FileText className={cn('w-3.5 h-3.5 shrink-0', isSelected ? 'text-violet-500' : 'text-slate-400')} />
+          <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: isSelected ? theme.colors.accent : theme.colors.textMuted }} />
           {isRenaming ? (
             <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
               onBlur={() => saveRename(note)}
               onKeyDown={e => { if (e.key === 'Enter') saveRename(note); if (e.key === 'Escape') setRenamingNoteId(null); }}
               onClick={e => e.stopPropagation()}
-              className="flex-1 text-sm bg-white border border-violet-300 rounded px-1 py-0.5 outline-none text-slate-900 min-w-0" />
+              className="flex-1 text-sm rounded px-1 py-0.5 outline-none min-w-0"
+              style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.accent}`, color: theme.colors.textPrimary }} />
           ) : (
             <span className="flex-1 text-sm font-medium truncate min-w-0">{note.title}</span>
           )}
-          {isPinned && <Pin className="w-2.5 h-2.5 text-amber-400 shrink-0" />}
+          {isPinned && <Pin className="w-2.5 h-2.5 shrink-0" style={{ color: '#f59e0b' }} />}
           <button onClick={e => { e.stopPropagation(); setContextMenu({ x: e.currentTarget.getBoundingClientRect().right, y: e.currentTarget.getBoundingClientRect().bottom, note }); }}
-            className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 opacity-0 group-hover:opacity-100 transition-all">
+            className="shrink-0 w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+            style={{ color: theme.colors.textMuted }}>
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
         <div className="flex items-center gap-2 pl-5 flex-wrap">
-          <span className="text-[10px] text-slate-400">{timeAgo(note.updatedAt)}</span>
-          {linkedCount > 0 && <span className={cn('text-[10px] flex items-center gap-0.5', isSelected ? 'text-violet-400' : 'text-slate-400')}><LinkIcon className="w-2.5 h-2.5" />{linkedCount}</span>}
-          {tags.slice(0, 2).map(tag => <span key={tag} className={cn('text-[10px] px-1 rounded font-medium', isSelected ? 'bg-violet-200 text-violet-700' : 'bg-slate-200 text-slate-500')}>{tag}</span>)}
+          <span className="text-[10px]" style={{ color: theme.colors.textMuted }}>{timeAgo(note.updatedAt)}</span>
+          {linkedCount > 0 && <span className="text-[10px] flex items-center gap-0.5" style={{ color: isSelected ? theme.colors.accentText : theme.colors.textMuted }}><LinkIcon className="w-2.5 h-2.5" />{linkedCount}</span>}
+          {tags.slice(0, 2).map(tag => <span key={tag} className="text-[10px] px-1 rounded font-medium" style={{ background: theme.colors.bgTertiary, color: theme.colors.textMuted }}>{tag}</span>)}
         </div>
       </div>
     );
   };
 
-  // ── RENDER ───────────────────────────────────────────────────────────────
+  const showHome = showDashboard || !activePane?.activeTabId;
+
+  // ─── Context menus ──────────────────────────────────────────────────────────
+  const CtxMenuItem = ({ onClick, icon: Icon, label, danger = false }: { onClick: () => void; icon: any; label: string; danger?: boolean }) => (
+    <button onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors text-left"
+      style={{ color: danger ? theme.colors.danger : theme.colors.textSecondary }}
+      onMouseEnter={e => (e.currentTarget.style.background = danger ? `${theme.colors.danger}15` : theme.colors.bgTertiary)}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+      <Icon className="w-3.5 h-3.5" style={{ color: danger ? theme.colors.danger : theme.colors.textMuted }} />{label}
+    </button>
+  );
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex h-full overflow-hidden bg-white">
+      <div className="flex h-full overflow-hidden notes-sidebar" style={{ background: theme.colors.bgSecondary }}>
 
-        {/* ── Sidebar ──────────────────────────────────────────────── */}
-        <div className="flex flex-col border-r border-slate-200 bg-slate-50 shrink-0 overflow-hidden" style={{ width: sidebarWidth }}>
-          <div className="p-3 space-y-2 border-b border-slate-100 bg-white">
+        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+        <div className="notes-sidebar flex flex-col shrink-0 overflow-hidden" style={{ width: sidebarWidth, background: theme.colors.bgSecondary, borderRight: `1px solid ${theme.colors.border}` }}>
+          <div className="p-3 space-y-2" style={{ borderBottom: `1px solid ${theme.colors.border}`, background: theme.colors.cardBg }}>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: theme.colors.textMuted }} />
               <input placeholder="Search notes…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400" />
+                className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg outline-none"
+                style={{ background: theme.colors.inputBg, border: `1px solid ${theme.colors.inputBorder}`, color: theme.colors.textPrimary }} />
             </div>
             <div className="flex gap-1.5">
               <button onClick={() => handleCreateNote()} title="New note"
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                style={{ background: theme.colors.accent, color: theme.colors.buttonText }}>
                 <Plus className="w-3.5 h-3.5" /> New Note
               </button>
               <button onClick={() => setShowQuickCapture(true)} title="Quick capture (Ctrl+N)"
-                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-violet-600 hover:border-violet-300 transition-colors">
+                className="px-2.5 py-1.5 rounded-lg transition-colors"
+                style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}`, color: theme.colors.textMuted }}>
                 <Zap className="w-3.5 h-3.5" />
               </button>
               <button onClick={() => setIsAddingSection(v => !v)} title="New folder"
-                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors">
+                className="px-2.5 py-1.5 rounded-lg transition-colors"
+                style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}`, color: theme.colors.textMuted }}>
                 <Folder className="w-3.5 h-3.5" />
               </button>
-              <button onClick={() => setSortBy(s => s === 'updated' ? 'a-z' : s === 'a-z' ? 'z-a' : 'updated')} title={`Sort: ${sortBy}`}
-                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors">
+              <button onClick={() => setSortBy(s => s === 'updated' ? 'a-z' : s === 'a-z' ? 'z-a' : 'updated')}
+                className="px-2.5 py-1.5 rounded-lg transition-colors"
+                style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}`, color: theme.colors.textMuted }}>
                 <SortAsc className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1200,8 +1211,10 @@ export function Notes() {
                 <input autoFocus value={newSectionName} onChange={e => setNewSectionName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateSection(); if (e.key === 'Escape') setIsAddingSection(false); }}
                   placeholder="Section name…"
-                  className="flex-1 text-xs border border-violet-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-violet-300" />
-                <button onClick={handleCreateSection} className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700">Add</button>
+                  className="flex-1 text-xs rounded-lg px-2.5 py-1.5 outline-none"
+                  style={{ border: `1px solid ${theme.colors.accent}`, background: theme.colors.inputBg, color: theme.colors.textPrimary }} />
+                <button onClick={handleCreateSection} className="px-3 py-1.5 text-xs font-medium rounded-lg"
+                  style={{ background: theme.colors.accent, color: theme.colors.buttonText }}>Add</button>
               </div>
             )}
           </div>
@@ -1210,7 +1223,8 @@ export function Notes() {
             <Droppable droppableId="__none__">
               {(drop, dropSnap) => (
                 <div ref={drop.innerRef} {...drop.droppableProps}
-                  className={cn('min-h-[4px] rounded-lg transition-colors', dropSnap.isDraggingOver ? 'bg-violet-50 ring-2 ring-violet-200 ring-inset' : '')}>
+                  className="min-h-[4px] rounded-lg transition-colors"
+                  style={{ background: dropSnap.isDraggingOver ? theme.colors.accentLight : 'transparent', outline: dropSnap.isDraggingOver ? `2px solid ${theme.colors.accent}40` : 'none' }}>
                   {unsectionedNotes.map((note, i) => (
                     <Draggable key={note.id} draggableId={note.id} index={i}>
                       {(drag, snap) => renderNoteItem(note, i, drag, snap)}
@@ -1226,27 +1240,31 @@ export function Notes() {
               const isOpen   = isSectionExpanded(section.id);
               return (
                 <div key={section.id}>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-slate-500 hover:text-slate-800 hover:bg-slate-100 group transition-colors"
+                  <div className="notes-section-header flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer group transition-colors"
+                    style={{ color: theme.colors.textMuted }}
                     onClick={() => toggleSection(section.id)}
-                    onContextMenu={e => { e.preventDefault(); setFolderMenu({ x: e.clientX, y: e.clientY, section }); }}>
+                    onContextMenu={e => { e.preventDefault(); setFolderMenu({ x: e.clientX, y: e.clientY, section }); }}
+                    onMouseEnter={e => (e.currentTarget.style.background = theme.colors.bgTertiary)}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     <button onClick={e => { e.stopPropagation(); toggleSection(section.id); }} className="w-4 h-4 flex items-center justify-center shrink-0">
                       {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     </button>
-                    {isOpen ? <FolderOpen className="w-3.5 h-3.5 shrink-0 text-violet-400" /> : <Folder className="w-3.5 h-3.5 shrink-0 text-slate-400" />}
-                    <span className="flex-1 text-xs font-semibold truncate">{section.name}</span>
-                    <span className="text-[10px] text-slate-400 mr-1">{secNotes.length}</span>
+                    {isOpen ? <FolderOpen className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} /> : <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.textMuted }} />}
+                    <span className="flex-1 text-xs font-semibold truncate" style={{ color: theme.colors.textSecondary }}>{section.name}</span>
+                    <span className="text-[10px] mr-1" style={{ color: theme.colors.textMuted }}>{secNotes.length}</span>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
                       <button onClick={e => { e.stopPropagation(); handleCreateNote(undefined, section.id); }}
-                        className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50"><Plus className="w-3 h-3" /></button>
+                        className="w-5 h-5 flex items-center justify-center rounded transition-colors" style={{ color: theme.colors.textMuted }}><Plus className="w-3 h-3" /></button>
                       <button onClick={e => { e.stopPropagation(); setFolderMenu({ x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom, section }); }}
-                        className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"><MoreHorizontal className="w-3 h-3" /></button>
+                        className="w-5 h-5 flex items-center justify-center rounded transition-colors" style={{ color: theme.colors.textMuted }}><MoreHorizontal className="w-3 h-3" /></button>
                     </div>
                   </div>
                   {isOpen && (
                     <Droppable droppableId={section.id}>
                       {(drop, dropSnap) => (
                         <div ref={drop.innerRef} {...drop.droppableProps}
-                          className={cn('ml-4 space-y-0.5 min-h-[28px] rounded-lg transition-colors', dropSnap.isDraggingOver ? 'bg-violet-50 ring-2 ring-violet-200 ring-inset' : '')}>
+                          className="ml-4 space-y-0.5 min-h-[28px] rounded-lg transition-colors"
+                          style={{ background: dropSnap.isDraggingOver ? theme.colors.accentLight : 'transparent', outline: dropSnap.isDraggingOver ? `2px solid ${theme.colors.accent}40` : 'none' }}>
                           {secNotes.map((note, i) => (
                             <Draggable key={note.id} draggableId={note.id} index={i}>
                               {(drag, snap) => renderNoteItem(note, i, drag, snap)}
@@ -1262,20 +1280,26 @@ export function Notes() {
             })}
 
             {workspaceNotes.length === 0 && (
-              <div className="text-center py-8 text-slate-400">
+              <div className="text-center py-8" style={{ color: theme.colors.textMuted }}>
                 <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-xs">No notes yet</p>
-                <button onClick={() => setShowQuickCapture(true)} className="mt-2 text-xs text-violet-500 hover:text-violet-700 font-medium transition-colors">Quick capture (Ctrl+N)</button>
+                <button onClick={() => setShowQuickCapture(true)} className="mt-2 text-xs font-medium transition-colors" style={{ color: theme.colors.accent }}>
+                  Quick capture (Ctrl+N)
+                </button>
               </div>
             )}
           </div>
         </div>
 
         {/* Resize handle */}
-        <div onMouseDown={() => setIsDraggingBar(true)} className="w-1 cursor-col-resize hover:bg-violet-300 bg-slate-200 transition-colors shrink-0 z-10" />
+        <div onMouseDown={() => setIsDraggingBar(true)}
+          className="w-1 cursor-col-resize shrink-0 z-10 transition-colors"
+          style={{ background: theme.colors.border }}
+          onMouseEnter={e => (e.currentTarget.style.background = theme.colors.accent)}
+          onMouseLeave={e => (e.currentTarget.style.background = theme.colors.border)} />
 
-        {/* ── Main area ──────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* ── Main area ─────────────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: theme.colors.bgSecondary }}>
           {showHome ? (
             <NotesDashboard
               notes={workspaceNotes} sections={workspaceSections} pinnedIds={pinnedIds}
@@ -1307,37 +1331,30 @@ export function Notes() {
           )}
         </div>
 
-        {/* ── Context menus ─────────────────────────────────────── */}
+        {/* ── Context menus ──────────────────────────────────────────────────── */}
         {contextMenu && (
-          <div className="fixed z-50 w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
-            style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 200) }}
+          <div className="fixed z-50 w-48 rounded-xl shadow-xl overflow-hidden"
+            style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 200), background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}
             onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setRenamingNoteId(contextMenu.note.id); setRenameValue(contextMenu.note.title); setContextMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><Edit2 className="w-3.5 h-3.5 text-slate-400" />Rename</button>
-            <button onClick={() => { togglePin(contextMenu.note.id); setContextMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><Pin className="w-3.5 h-3.5 text-slate-400" />{pinnedIds.has(contextMenu.note.id)?'Unpin':'Pin'}</button>
-            <button onClick={() => { const n=contextMenu.note,copy=getUniqueName(`${n.title} Copy`,n.sectionId),id=uuidv4(); addNote({id,title:copy,content:n.content,workspace,sectionId:n.sectionId} as any); setContextMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><Copy className="w-3.5 h-3.5 text-slate-400" />Duplicate</button>
-            <button onClick={() => { sessionStorage.setItem('nexus_open_note',contextMenu.note.id); window.open(window.location.href,'_blank'); setContextMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><ExternalLink className="w-3.5 h-3.5 text-slate-400" />Open in New Tab</button>
-            <div className="h-px bg-slate-100 mx-3" />
-            <button onClick={() => { setShowDeleteNote(contextMenu.note); setContextMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" />Delete</button>
+            <CtxMenuItem onClick={() => { setRenamingNoteId(contextMenu.note.id); setRenameValue(contextMenu.note.title); setContextMenu(null); }} icon={Edit2} label="Rename" />
+            <CtxMenuItem onClick={() => { togglePin(contextMenu.note.id); setContextMenu(null); }} icon={Pin} label={pinnedIds.has(contextMenu.note.id) ? 'Unpin' : 'Pin'} />
+            <CtxMenuItem onClick={() => { const n=contextMenu.note,copy=getUniqueName(`${n.title} Copy`,n.sectionId),id=uuidv4(); addNote({id,title:copy,content:n.content,workspace,sectionId:n.sectionId} as any); setContextMenu(null); }} icon={Copy} label="Duplicate" />
+            <CtxMenuItem onClick={() => { sessionStorage.setItem('nexus_open_note',contextMenu.note.id); window.open(window.location.href,'_blank'); setContextMenu(null); }} icon={ExternalLink} label="Open in New Tab" />
+            <div className="h-px mx-3" style={{ background: theme.colors.border }} />
+            <CtxMenuItem onClick={() => { setShowDeleteNote(contextMenu.note); setContextMenu(null); }} icon={Trash2} label="Delete" danger />
           </div>
         )}
         {folderMenu && (
-          <div className="fixed z-50 w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
-            style={{ top: folderMenu.y, left: Math.min(folderMenu.x, window.innerWidth - 200) }}
+          <div className="fixed z-50 w-48 rounded-xl shadow-xl overflow-hidden"
+            style={{ top: folderMenu.y, left: Math.min(folderMenu.x, window.innerWidth - 200), background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}
             onClick={e => e.stopPropagation()}>
-            <button onClick={() => { handleCreateNote(undefined, folderMenu.section.id); setFolderMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><Plus className="w-3.5 h-3.5 text-slate-400" />New note inside</button>
-            <div className="h-px bg-slate-100 mx-3" />
-            <button onClick={() => { setShowDeleteFolder(folderMenu.section); setFolderMenu(null); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" />Delete folder</button>
+            <CtxMenuItem onClick={() => { handleCreateNote(undefined, folderMenu.section.id); setFolderMenu(null); }} icon={Plus} label="New note inside" />
+            <div className="h-px mx-3" style={{ background: theme.colors.border }} />
+            <CtxMenuItem onClick={() => { setShowDeleteFolder(folderMenu.section); setFolderMenu(null); }} icon={Trash2} label="Delete folder" danger />
           </div>
         )}
 
-        {/* ── Confirm modals ────────────────────────────────────── */}
+        {/* ── Confirm modals ────────────────────────────────────────────────── */}
         {showDeleteNote && (
           <ConfirmDialog title="Delete Note"
             message={<>Delete <strong>"{showDeleteNote.title}"</strong>? This cannot be undone.</>}
@@ -1349,7 +1366,7 @@ export function Notes() {
           const count = workspaceNotes.filter(n => n.sectionId === showDeleteFolder.id).length;
           return (
             <ConfirmDialog title="Delete Folder"
-              message={<>Delete <strong>"{showDeleteFolder.name}"</strong>?{count > 0 && <span className="block mt-2 text-red-600 font-medium">⚠ Moves {count} note{count>1?'s':''} out of folder.</span>}</>}
+              message={<>Delete <strong>"{showDeleteFolder.name}"</strong>?{count > 0 && <span className="block mt-2 font-medium" style={{ color: theme.colors.danger }}>⚠ Moves {count} note{count>1?'s':''} out of folder.</span>}</>}
               confirmLabel="Delete Folder"
               onConfirm={() => { deleteNoteSection(showDeleteFolder.id); setShowDeleteFolder(null); }}
               onCancel={() => setShowDeleteFolder(null)} />
@@ -1357,10 +1374,10 @@ export function Notes() {
         })()}
         {dragConflict && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="rounded-2xl shadow-2xl w-full max-w-sm" style={{ background: theme.colors.cardBg, border: `1px solid ${theme.colors.border}` }}>
               <div className="p-6">
-                <h3 className="text-base font-semibold text-slate-900 mb-1">Name conflict</h3>
-                <p className="text-sm text-slate-500 mb-4">A note with this name already exists. Enter a new name:</p>
+                <h3 className="text-base font-semibold mb-1" style={{ color: theme.colors.textPrimary }}>Name conflict</h3>
+                <p className="text-sm mb-4" style={{ color: theme.colors.textSecondary }}>A note with this name already exists. Enter a new name:</p>
                 <Input autoFocus value={dragConflict.newName} onChange={e => setDragConflict({...dragConflict,newName:e.target.value})}
                   onKeyDown={e => { if(e.key==='Enter'){updateNote(dragConflict.noteId,{sectionId:dragConflict.targetSectionId,title:dragConflict.newName.trim()});setDragConflict(null);}if(e.key==='Escape')setDragConflict(null);}}
                   placeholder="New file name…" />
@@ -1374,15 +1391,9 @@ export function Notes() {
           </div>
         )}
 
-        {/* Quick Capture */}
         {showQuickCapture && (
           <QuickCaptureBar onClose={() => setShowQuickCapture(false)} sections={workspaceSections}
-            onCapture={(title, content, sectionId) => {
-              handleCreateNote(undefined, sectionId, content);
-              // Override title after creation
-              // (handleCreateNote uses 'Untitled Note', then we need to rename)
-              // Simpler: inline the creation here
-            }} />
+            onCapture={(title, content, sectionId) => { handleCreateNote(undefined, sectionId, content); }} />
         )}
       </div>
     </DragDropContext>
