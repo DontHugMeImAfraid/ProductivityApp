@@ -9,7 +9,7 @@ import { Menu, Sparkles } from 'lucide-react';
 import { Button } from './components/ui/Button';
 import { SpendingManager } from './pages/SpendingManager';
 import { cn } from './lib/utils';
-import { useAppStore } from './store';
+import { useAppStore, hydrateStore } from './store';
 import { ThemeProvider } from './contexts/ThemeSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthPage from './pages/AuthPage';
@@ -22,6 +22,23 @@ function AppInner() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [displayView, setDisplayView] = useState(currentView);
+
+  // Hydrate the store with this user's data as soon as we know who they are
+  useEffect(() => {
+    if (!cognitoUser) return;
+    // Cognito user's unique sub is the stable per-account identifier
+    const sub = cognitoUser.getUsername();
+    cognitoUser.getSession((err: any, session: any) => {
+      if (!err && session) {
+        const idToken = session.getIdToken().decodePayload();
+        const userId = idToken.sub ?? sub;
+        hydrateStore(userId);
+      } else {
+        // Fallback to username if session decode fails
+        hydrateStore(sub);
+      }
+    });
+  }, [cognitoUser]);
 
   useEffect(() => {
     const openNoteId = sessionStorage.getItem('nexus_open_note');

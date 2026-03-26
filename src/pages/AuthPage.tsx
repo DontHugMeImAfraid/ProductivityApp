@@ -13,6 +13,7 @@ import {
   CognitoUserSession,
 } from 'amazon-cognito-identity-js';
 import { userPool, COGNITO_CONFIG, useAuth } from '@/contexts/AuthContext';
+import { LoginSuccessPage, SetPasswordView } from '@/pages/AuthAdditions';
 
 // ─── Error mapper ─────────────────────────────────────────────────────────────
 function friendlyError(err: { code?: string; message?: string }): string {
@@ -235,7 +236,11 @@ function Orbs() {
 }
 
 // ─── Sign-in view ─────────────────────────────────────────────────────────────
-function SignInView({ onForgotPassword, onSignUp }: { onForgotPassword: () => void; onSignUp: () => void }) {
+function SignInView({ onForgotPassword, onSignUp, onChallenge }: {
+  onForgotPassword: () => void;
+  onSignUp: () => void;
+  onChallenge: (user: CognitoUser, email: string) => void;
+}) {
   const { onLoginSuccess } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
@@ -253,7 +258,7 @@ function SignInView({ onForgotPassword, onSignUp }: { onForgotPassword: () => vo
     cognitoUser.authenticateUser(authDetails, {
       onSuccess: (session: CognitoUserSession) => {
         setLoading(false);
-        onLoginSuccess(cognitoUser, session); // ← updates AuthContext → AppInner re-renders
+        onLoginSuccess(cognitoUser, session);
       },
       onFailure: (err) => {
         setLoading(false);
@@ -261,7 +266,7 @@ function SignInView({ onForgotPassword, onSignUp }: { onForgotPassword: () => vo
       },
       newPasswordRequired: () => {
         setLoading(false);
-        setError('A password reset is required for this account. Please contact support.');
+        onChallenge(cognitoUser, email.trim());
       },
     });
   };
@@ -387,89 +392,35 @@ function VerifyView({ email, onSuccess, onSignIn }: { email: string; onSuccess: 
 }
 
 // ─── Forgot password view ─────────────────────────────────────────────────────
-function ForgotView({ onSignIn }: { onSignIn: () => void }) {
-  const [step,     setStep]     = useState<'request' | 'reset'>('request');
-  const [email,    setEmail]    = useState('');
-  const [code,     setCode]     = useState('');
-  const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [success,  setSuccess]  = useState('');
-
-  const handleRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) { setError('Please enter your email.'); return; }
-    setLoading(true); setError('');
-    const cognitoUser = new CognitoUser({ Username: email.trim(), Pool: userPool });
-    cognitoUser.forgotPassword({
-      onSuccess: () => { setLoading(false); setStep('reset'); },
-      onFailure: (err) => { setLoading(false); setError(friendlyError(err)); },
-    });
-  };
-
-  const handleReset = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code || !password) { setError('Please fill in all fields.'); return; }
-    setLoading(true); setError('');
-    const cognitoUser = new CognitoUser({ Username: email.trim(), Pool: userPool });
-    cognitoUser.confirmPassword(code.trim(), password, {
-      onSuccess: () => {
-        setLoading(false);
-        setSuccess('Password reset! Redirecting to sign in…');
-        setTimeout(onSignIn, 2000);
-      },
-      onFailure: (err) => { setLoading(false); setError(friendlyError(err)); },
-    });
-  };
-
-  if (step === 'request') return (
-    <form onSubmit={handleRequest}>
-      <Alert message={error} type="error" />
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>
-        Enter your email and we'll send a reset code.
-      </p>
-      <Field label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-        placeholder="you@company.com" autoComplete="email" />
-      <Btn type="submit" loading={loading}>Send reset code</Btn>
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <button type="button" onClick={onSignIn} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#94a3b8', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", padding: 0 }}>
-          ← Back to sign in
-        </button>
-      </div>
-    </form>
-  );
-
-  return (
-    <form onSubmit={handleReset}>
-      <Alert message={error} type="error" />
-      <Alert message={success} type="success" />
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>
-        Enter the code sent to <strong style={{ color: '#334155' }}>{email}</strong> and your new password.
-      </p>
-      <Field label="Reset code" value={code} onChange={e => setCode(e.target.value)} placeholder="123456" />
-      <Field label="New password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-        placeholder="New strong password" autoComplete="new-password" />
-      <PasswordStrength password={password} />
-      <Btn type="submit" loading={loading}>Reset password</Btn>
-    </form>
-  );
+// Replaced by SetPasswordView (mode="forgot") — this stub just triggers the
+// code-request step; the actual UI lives in AuthAdditions.tsx.
+function ForgotView({ onSignIn, onSetPassword }: {
+  onSignIn: () => void;
+  onSetPassword: (email: string) => void;
+}) {
+  // Immediately render SetPasswordView in forgot mode — it handles both steps internally.
+  return null; // Never rendered; routing handled in AuthPage JSX below.
 }
 
 // ─── Root AuthPage ────────────────────────────────────────────────────────────
-type View = 'signin' | 'signup' | 'verify' | 'forgot';
+type View = 'signin' | 'signup' | 'verify' | 'forgot' | 'setpassword' | 'success';
 
 const META: Record<View, { title: string; subtitle: string }> = {
-  signin: { title: 'Welcome back',      subtitle: 'Sign in to your Nexus workspace' },
-  signup: { title: 'Create your space', subtitle: 'Get started with Nexus for free' },
-  verify: { title: 'Verify your email', subtitle: 'Almost there — one quick step' },
-  forgot: { title: 'Reset password',    subtitle: "We'll get you back in seconds" },
+  signin:      { title: 'Welcome back',      subtitle: 'Sign in to your Nexus workspace' },
+  signup:      { title: 'Create your space', subtitle: 'Get started with Nexus for free' },
+  verify:      { title: 'Verify your email', subtitle: 'Almost there — one quick step' },
+  forgot:      { title: 'Reset password',    subtitle: "We'll get you back in seconds" },
+  setpassword: { title: 'Set your password', subtitle: 'Choose a strong password to continue' },
+  success:     { title: "You're in",         subtitle: 'Taking you to your workspace…' },
 };
 
 export default function AuthPage() {
   // No props needed — success is handled entirely via AuthContext
-  const [view,         setView]         = useState<View>('signin');
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [visible,      setVisible]      = useState(false);
+  const [view,          setView]          = useState<View>('signin');
+  const [pendingEmail,  setPendingEmail]  = useState('');
+  const [visible,       setVisible]       = useState(false);
+  const [setPwMode,     setSetPwMode]     = useState<'forgot' | 'challenge'>('forgot');
+  const [challengeUser, setChallengeUser] = useState<CognitoUser | null>(null);
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -557,10 +508,39 @@ export default function AuthPage() {
               <p style={{ margin: 0, fontSize: 14, color: '#64748b', fontFamily: "'DM Sans', sans-serif" }}>{meta.subtitle}</p>
             </div>
 
-            {view === 'signin' && <SignInView onForgotPassword={() => setView('forgot')} onSignUp={() => setView('signup')} />}
+            {view === 'signin' && (
+              <SignInView
+                onForgotPassword={() => { setSetPwMode('forgot'); setView('forgot'); }}
+                onSignUp={() => setView('signup')}
+                onChallenge={(user, email) => {
+                  setChallengeUser(user);
+                  setPendingEmail(email);
+                  setSetPwMode('challenge');
+                  setView('setpassword');
+                }}
+              />
+            )}
             {view === 'signup' && <SignUpView onVerify={email => { setPendingEmail(email); setView('verify'); }} onSignIn={() => setView('signin')} />}
             {view === 'verify' && <VerifyView email={pendingEmail} onSuccess={() => setView('signin')} onSignIn={() => setView('signin')} />}
-            {view === 'forgot' && <ForgotView onSignIn={() => setView('signin')} />}
+            {view === 'forgot' && (
+              <SetPasswordView
+                mode="forgot"
+                email={pendingEmail}
+                onEmailChange={setPendingEmail}
+                onSuccess={() => setView('success')}
+                onSignIn={() => setView('signin')}
+              />
+            )}
+            {view === 'setpassword' && (
+              <SetPasswordView
+                mode={setPwMode}
+                email={pendingEmail}
+                challengeUser={challengeUser}
+                onSuccess={() => setView('success')}
+                onSignIn={() => setView('signin')}
+              />
+            )}
+            {view === 'success' && <LoginSuccessPage />}
           </div>
 
           <p style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8', fontFamily: "'DM Sans', sans-serif" }}>

@@ -4,9 +4,9 @@ import { CognitoUserPool, CognitoUser, CognitoUserSession } from 'amazon-cognito
 
 // ─── Exported so AuthPage imports from here — one shared instance ─────────────
 export const COGNITO_CONFIG = {
-  UserPoolId: 'eu-north-1_I7V7XHbtJ',
-  ClientId: '7io3gvj0rggnp3p826dfeefpih',
-  hostedUiDomain: 'https://eu-north-1i7v7xhbtj.auth.eu-north-1.amazoncognito.com',
+  UserPoolId: 'eu-north-1_vh9oZXfBF',
+  ClientId: '2t80et0jg9316q7plf69o1ghtn',
+  hostedUiDomain: 'https://eu-north-1vh9ozxfbf.auth.eu-north-1.amazoncognito.com',
   redirectUri: window.location.origin,
 };
 

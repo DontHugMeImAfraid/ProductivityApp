@@ -206,7 +206,6 @@ const initialSettings: Settings = {
 
 // ─── Persistence helpers ──────────────────────────────────────────────────────
 
-// Debounce IDB writes so rapid mutations don't flood the DB
 const writeTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 function debouncedWrite(store: 'notes' | 'tasks' | 'events' | 'projects' | 'projectColumns', items: any[], delay = 300) {
@@ -223,10 +222,8 @@ function debouncedWrite(store: 'notes' | 'tasks' | 'events' | 'projects' | 'proj
 let _initDone = false;
 
 async function loadPersistedState(): Promise<Partial<AppState>> {
-  // 1. Try to migrate from old Zustand localStorage key
   const legacy = await NexusDB.migrateFromLegacy();
   if (legacy) {
-    // Write legacy data into IDB
     await Promise.all([
       NexusDB.replaceAll('notes',          legacy.notes),
       NexusDB.replaceAll('tasks',          legacy.tasks),
@@ -234,15 +231,12 @@ async function loadPersistedState(): Promise<Partial<AppState>> {
       NexusDB.replaceAll('projects',       legacy.projects),
       NexusDB.replaceAll('projectColumns', legacy.projectColumns),
     ]);
-    // Save lightweight config from legacy
     if (legacy.settings)     NexusDB.lsSet('settings',     legacy.settings);
     if (legacy.profiles)     NexusDB.lsSet('profiles',     legacy.profiles);
     if (legacy.noteSections) NexusDB.lsSet('noteSections', legacy.noteSections);
-    // Remove old key to prevent re-migration
     NexusDB.clearLegacy();
   }
 
-  // 2. Load IDB collections
   const [notes, tasks, events, projects, projectColumns] = await Promise.all([
     NexusDB.loadAll<Note>('notes'),
     NexusDB.loadAll<Task>('tasks'),
@@ -251,12 +245,10 @@ async function loadPersistedState(): Promise<Partial<AppState>> {
     NexusDB.loadAll<ProjectColumn>('projectColumns'),
   ]);
 
-  // 3. Load lightweight LS config
   const settings     = NexusDB.lsGet<Settings>('settings',     initialSettings);
   const profiles     = NexusDB.lsGet<Profile[]>('profiles',     initialProfiles);
   const noteSections = NexusDB.lsGet<NoteSection[]>('noteSections', initialNoteSections);
 
-  // 4. If IDB was empty (fresh install), use seed data
   const hasTasks    = tasks.length > 0;
   const hasProjects = projects.length > 0;
 
@@ -357,7 +349,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteTask: (id) => set((state) => {
     NexusDB.delete('tasks', id);
-    // also remove linked calendar events
     const linkedEvents = state.events.filter(e => e.linkedTaskId === id);
     linkedEvents.forEach(e => NexusDB.delete('events', e.id));
     return {
@@ -567,21 +558,32 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // ─── Hydrate store from IndexedDB on startup ──────────────────────────────────
 
-export async function hydrateStore(): Promise<void> {
-  if (_initDone) return;
-  _initDone = true;
+let _lastUserId: string | null = null;
+
+/**
+ * Call this with the Cognito user's `sub` on every login / session restore.
+ * Passing a new userId resets the init guard so the store fully reloads
+ * with that user's data — ensuring account isolation.
+ */
+export async function hydrateStore(userId: string): Promise<void> {
+  if (_initDone && userId === _lastUserId) return;
+
+  // Scope all storage to this user before touching the DB
+  NexusDB.setUserId(userId);
+
+  _initDone   = true;
+  _lastUserId = userId;
 
   try {
     const persisted = await loadPersistedState();
     useAppStore.setState({
       ...persisted,
-      // Restore last active workspace/project from LS
+      // Restore last active workspace/project from this user's LS keys
       workspace:         NexusDB.lsGet('workspace',         'Work'),
       selectedProjectId: NexusDB.lsGet('selectedProjectId', 'proj-work'),
     });
   } catch (err) {
     console.error('[store] Failed to hydrate from IndexedDB:', err);
-    // App continues with seed data — user loses persisted state but app stays functional
   }
 }
 

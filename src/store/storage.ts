@@ -9,24 +9,39 @@
  *  - localStorage for lightweight config:
  *      settings, profiles, noteSections, workspaces, ui-state
  *
- * All APIs are async-safe and fall back gracefully to localStorage if
- * IndexedDB is unavailable (private browsing, storage quota exceeded, etc.)
+ * All data is scoped per-user via a userId prefix so no two Cognito
+ * accounts ever share the same IndexedDB database or localStorage keys.
+ *
+ * Call NexusDB.setUserId(sub) before any read/write (done in hydrateStore).
  */
 
-const DB_NAME    = 'nexus-db';
-const DB_VERSION = 1;
+// ─── User scoping ─────────────────────────────────────────────────────────────
+
+let _userId: string = 'anonymous';
+
+/** Call this with the Cognito user's `sub` before hydrating the store. */
+export function setStorageUserId(id: string) {
+  _userId = id || 'anonymous';
+  // Reset cached DB handle so next openDB() opens the correct per-user database
+  _db = null;
+}
 
 // ─── IndexedDB bootstrap ──────────────────────────────────────────────────────
+
+const DB_VERSION = 1;
+
+function dbName() {
+  return `nexus-db-${_userId}`;
+}
 
 let _db: IDBDatabase | null = null;
 
 function openDB(): Promise<IDBDatabase> {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(dbName(), DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
-      // One object store per collection, keyed by id
       ['notes', 'tasks', 'events', 'projects', 'projectColumns'].forEach(name => {
         if (!db.objectStoreNames.contains(name)) {
           db.createObjectStore(name, { keyPath: 'id' });
@@ -55,7 +70,6 @@ async function idbPutAll<T>(store: string, items: T[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, 'readwrite');
     const os = tx.objectStore(store);
-    // clear then re-insert — simplest way to handle deletes
     const clearReq = os.clear();
     clearReq.onsuccess = () => {
       items.forEach(item => os.put(item));
@@ -86,20 +100,31 @@ async function idbPut<T>(store: string, item: T): Promise<void> {
   });
 }
 
+// ─── Key helpers ──────────────────────────────────────────────────────────────
+
+function lsKey(key: string) {
+  return `nexus-ls-${_userId}-${key}`;
+}
+
+function lsFallbackKey(store: string) {
+  return `nexus-idb-fallback-${_userId}-${store}`;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/** IDB-backed stores */
 export type IDBStoreName = 'notes' | 'tasks' | 'events' | 'projects' | 'projectColumns';
 
 export const NexusDB = {
-  /** Load all records from an IDB store */
+  /** Scope all storage to this user. Must be called before any read/write. */
+  setUserId: setStorageUserId,
+
   async loadAll<T>(store: IDBStoreName): Promise<T[]> {
     try {
       return await idbGetAll<T>(store);
     } catch (err) {
       console.warn(`[NexusDB] IDB read failed for "${store}", falling back to localStorage`, err);
       try {
-        const raw = localStorage.getItem(`nexus-idb-fallback-${store}`);
+        const raw = localStorage.getItem(lsFallbackKey(store));
         return raw ? (JSON.parse(raw) as T[]) : [];
       } catch {
         return [];
@@ -107,69 +132,60 @@ export const NexusDB = {
     }
   },
 
-  /** Persist a single item (upsert) */
   async put<T>(store: IDBStoreName, item: T): Promise<void> {
     try {
       await idbPut(store, item);
     } catch (err) {
       console.warn(`[NexusDB] IDB put failed for "${store}"`, err);
-      // best-effort fallback: load existing, merge, write back
       try {
-        const existing = JSON.parse(localStorage.getItem(`nexus-idb-fallback-${store}`) ?? '[]') as T[];
+        const existing = JSON.parse(localStorage.getItem(lsFallbackKey(store)) ?? '[]') as T[];
         const id = (item as any).id;
         const merged = [...existing.filter((x: any) => x.id !== id), item];
-        localStorage.setItem(`nexus-idb-fallback-${store}`, JSON.stringify(merged));
-      } catch { /* quota exceeded — nothing we can do */ }
+        localStorage.setItem(lsFallbackKey(store), JSON.stringify(merged));
+      } catch { /* quota exceeded */ }
     }
   },
 
-  /** Remove a record by id */
   async delete(store: IDBStoreName, id: string): Promise<void> {
     try {
       await idbDelete(store, id);
     } catch (err) {
       console.warn(`[NexusDB] IDB delete failed for "${store}"`, err);
       try {
-        const existing = JSON.parse(localStorage.getItem(`nexus-idb-fallback-${store}`) ?? '[]') as any[];
-        localStorage.setItem(`nexus-idb-fallback-${store}`, JSON.stringify(existing.filter(x => x.id !== id)));
+        const existing = JSON.parse(localStorage.getItem(lsFallbackKey(store)) ?? '[]') as any[];
+        localStorage.setItem(lsFallbackKey(store), JSON.stringify(existing.filter(x => x.id !== id)));
       } catch { /* ignore */ }
     }
   },
 
-  /** Replace entire collection (used on bulk actions) */
   async replaceAll<T>(store: IDBStoreName, items: T[]): Promise<void> {
     try {
       await idbPutAll(store, items);
     } catch (err) {
       console.warn(`[NexusDB] IDB replaceAll failed for "${store}"`, err);
       try {
-        localStorage.setItem(`nexus-idb-fallback-${store}`, JSON.stringify(items));
+        localStorage.setItem(lsFallbackKey(store), JSON.stringify(items));
       } catch { /* quota exceeded */ }
     }
   },
 
-  // ── localStorage helpers for lightweight config ──────────────────────────
-
-  /** Read a JSON value from localStorage */
   lsGet<T>(key: string, fallback: T): T {
     try {
-      const raw = localStorage.getItem(`nexus-ls-${key}`);
+      const raw = localStorage.getItem(lsKey(key));
       return raw !== null ? (JSON.parse(raw) as T) : fallback;
     } catch {
       return fallback;
     }
   },
 
-  /** Write a JSON value to localStorage */
   lsSet<T>(key: string, value: T): void {
     try {
-      localStorage.setItem(`nexus-ls-${key}`, JSON.stringify(value));
+      localStorage.setItem(lsKey(key), JSON.stringify(value));
     } catch (err) {
       console.warn(`[NexusDB] localStorage write failed for "${key}"`, err);
     }
   },
 
-  /** Migrate from the old nexus-store Zustand key if it exists */
   async migrateFromLegacy(): Promise<{
     notes: any[]; tasks: any[]; events: any[];
     projects: any[]; projectColumns: any[];
@@ -196,7 +212,6 @@ export const NexusDB = {
     }
   },
 
-  /** Clear the legacy nexus-store key after successful migration */
   clearLegacy(): void {
     localStorage.removeItem('nexus-store');
   },
