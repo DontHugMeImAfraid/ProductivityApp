@@ -38,7 +38,7 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
   };
 
   const currentProfile = profiles.find(p => p.name === workspace) ?? profiles[0];
-  const { signOut } = useAuth();
+  const { signOut, userEmail } = useAuth();
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setProfileMenuOpen(false);
@@ -171,10 +171,10 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm"
               style={{ backgroundColor: currentProfile?.color ?? '#6366f1' }}
             >
-              {(currentProfile?.name ?? 'U').charAt(0).toUpperCase()}
+              {(userEmail || currentProfile?.name || 'U').charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-slate-900 truncate">{currentProfile?.name ?? 'User'}</p>
+              <p className="text-sm font-medium text-slate-900 truncate">{userEmail || currentProfile?.name || 'User'}</p>
               <p className="text-xs text-slate-400 truncate flex items-center gap-1">
                 {theme.emoji} {theme.name}
               </p>

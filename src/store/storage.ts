@@ -1,19 +1,36 @@
-/**
+
+
+import { supabase } from '@/lib/supabase';
+/**s
  * storage.ts
  *
  * Persistence layer for Nexus.
  *
  * Strategy:
- *  - IndexedDB (via a tiny hand-rolled wrapper) for data-heavy stores:
+ *  - Supabase (primary, cloud) for all IDB stores:
  *      notes, tasks, events, projects, projectColumns
+ *  - IndexedDB (local cache / offline fallback) for the same stores
  *  - localStorage for lightweight config:
  *      settings, profiles, noteSections, workspaces, ui-state
  *
- * All data is scoped per-user via a userId prefix so no two Cognito
- * accounts ever share the same IndexedDB database or localStorage keys.
+ * All data is scoped per-user via a userId prefix so no two accounts
+ * ever share the same IndexedDB database or localStorage keys.
  *
  * Call NexusDB.setUserId(sub) before any read/write (done in hydrateStore).
  */
+
+
+// ─── Supabase table map ───────────────────────────────────────────────────────
+
+// Maps IDB store names → Supabase table names.
+// Add / rename entries here if your Supabase table names differ.
+const SUPABASE_TABLES: Partial<Record<IDBStoreName, string>> = {
+  notes:          'notes',
+  tasks:          'tasks',
+  events:         'events',
+  projects:       'projects',
+  projectColumns: 'project_columns',
+};
 
 // ─── User scoping ─────────────────────────────────────────────────────────────
 
@@ -118,35 +135,56 @@ export const NexusDB = {
   /** Scope all storage to this user. Must be called before any read/write. */
   setUserId: setStorageUserId,
 
+  /**
+   * Load all records for a store.
+   * 1. Try Supabase (cloud source of truth) and refresh the local IDB cache.
+   * 2. Fall back to local IDB if Supabase is unavailable.
+   */
   async loadAll<T>(store: IDBStoreName): Promise<T[]> {
-    try {
-      return await idbGetAll<T>(store);
-    } catch (err) {
-      console.warn(`[NexusDB] IDB read failed for "${store}", falling back to localStorage`, err);
+    const table = SUPABASE_TABLES[store];
+    if (table) {
       try {
-        const raw = localStorage.getItem(lsFallbackKey(store));
-        return raw ? (JSON.parse(raw) as T[]) : [];
-      } catch {
-        return [];
+        const { data, error } = await supabase.from(table).select('*');
+        if (!error && data) {
+          // Refresh local cache in the background
+          idbPutAll(store, data).catch(() => {});
+          return data as T[];
+        }
+      } catch (err) {
+        console.warn(`[NexusDB] Supabase loadAll failed for "${store}", falling back to IDB`, err);
       }
     }
+    // Offline / error fallback
+    return idbGetAll<T>(store);
   },
 
+  /**
+   * Upsert a single record.
+   * Writes to IDB immediately (instant UI), then syncs to Supabase.
+   */
   async put<T>(store: IDBStoreName, item: T): Promise<void> {
+    // 1. Local write first — keeps the UI snappy
     try {
       await idbPut(store, item);
     } catch (err) {
       console.warn(`[NexusDB] IDB put failed for "${store}"`, err);
-      try {
-        const existing = JSON.parse(localStorage.getItem(lsFallbackKey(store)) ?? '[]') as T[];
-        const id = (item as any).id;
-        const merged = [...existing.filter((x: any) => x.id !== id), item];
-        localStorage.setItem(lsFallbackKey(store), JSON.stringify(merged));
-      } catch { /* quota exceeded */ }
+    }
+
+    // 2. Cloud sync
+    const table = SUPABASE_TABLES[store];
+    if (table) {
+      supabase.from(table).upsert(item).then(({ error }) => {
+        if (error) console.warn(`[NexusDB] Supabase upsert failed for "${store}"`, error);
+      });
     }
   },
 
+  /**
+   * Delete a record by id.
+   * Removes from IDB and from Supabase.
+   */
   async delete(store: IDBStoreName, id: string): Promise<void> {
+    // Local delete
     try {
       await idbDelete(store, id);
     } catch (err) {
@@ -156,8 +194,20 @@ export const NexusDB = {
         localStorage.setItem(lsFallbackKey(store), JSON.stringify(existing.filter(x => x.id !== id)));
       } catch { /* ignore */ }
     }
+
+    // Cloud delete
+    const table = SUPABASE_TABLES[store];
+    if (table) {
+      supabase.from(table).delete().eq('id', id).then(({ error }) => {
+        if (error) console.warn(`[NexusDB] Supabase delete failed for "${store}"`, error);
+      });
+    }
   },
 
+  /**
+   * Replace all records in a store (used for bulk reorders / migrations).
+   * Writes to IDB only — individual puts handle Supabase sync.
+   */
   async replaceAll<T>(store: IDBStoreName, items: T[]): Promise<void> {
     try {
       await idbPutAll(store, items);
@@ -168,6 +218,8 @@ export const NexusDB = {
       } catch { /* quota exceeded */ }
     }
   },
+
+  // ── localStorage helpers ──────────────────────────────────────────────────
 
   lsGet<T>(key: string, fallback: T): T {
     try {
@@ -185,6 +237,8 @@ export const NexusDB = {
       console.warn(`[NexusDB] localStorage write failed for "${key}"`, err);
     }
   },
+
+  // ── Legacy migration ──────────────────────────────────────────────────────
 
   async migrateFromLegacy(): Promise<{
     notes: any[]; tasks: any[]; events: any[];

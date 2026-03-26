@@ -1061,10 +1061,28 @@ export function Notes() {
   };
 
   const confirmDeleteNote = (note: Note) => {
-    (note.linkedTaskIds ?? []).forEach(tid => {
+    // 1. Safely extract the array, even if the database returned a string
+    let taskIds = [];
+    if (Array.isArray(note.linkedTaskIds)) {
+      taskIds = note.linkedTaskIds;
+    } else if (typeof note.linkedTaskIds === 'string') {
+      try { 
+        taskIds = JSON.parse(note.linkedTaskIds); 
+      } catch (e) { 
+        console.warn("Failed to parse linkedTaskIds:", note.linkedTaskIds); 
+      }
+    }
+
+    // 2. Iterate over the guaranteed array
+    taskIds.forEach(tid => {
       const t = tasks.find(t => t.id === tid);
-      if (t) updateTask(tid, { linkedNoteIds: (t.linkedNoteIds ?? []).filter(id => id !== note.id) });
+      if (t) {
+        // 3. Apply the same safety check to the Task's linked notes array!
+        const noteIds = Array.isArray(t.linkedNoteIds) ? t.linkedNoteIds : [];
+        updateTask(tid, { linkedNoteIds: noteIds.filter(id => id !== note.id) });
+      }
     });
+    
     deleteNote(note.id);
     setShowDeleteNote(null);
   };

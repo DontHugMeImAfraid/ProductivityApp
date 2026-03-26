@@ -7,12 +7,14 @@ import { CalendarView } from './pages/Calendar';
 import { Settings } from './pages/Settings';
 import { Menu, Sparkles } from 'lucide-react';
 import { Button } from './components/ui/Button';
-import { SpendingManager } from './pages/SpendingManager';
+import { SpendingManager } from './pages/Spendingmanager';
 import { cn } from './lib/utils';
 import { useAppStore, hydrateStore } from './store';
 import { ThemeProvider } from './contexts/ThemeSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthPage from './pages/AuthPage';
+
+
 
 // ─── Inner app — only rendered when authenticated ─────────────────────────────
 

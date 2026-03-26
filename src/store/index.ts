@@ -33,11 +33,15 @@ function buildEventFromTask(task: Task & { id: string }, durationMin: number): C
   const [h, m] = task.time ? task.time.split(':').map(Number) : [9, 0];
   const base = new Date(task.dueDate!);
   base.setHours(h, m, 0, 0);
+  
+  const startMs = base.getTime();
+  const endMs = startMs + durationMin * 60_000;
+
   return {
     id: uuidv4(),
     title: task.title,
-    startTime: base.getTime(),
-    endTime: base.getTime() + durationMin * 60_000,
+    startTime: new Date(startMs).toISOString(), // Ensure ISO string
+    endTime: new Date(endMs).toISOString(),     // Ensure ISO string
     workspace: task.workspace,
     isPrivate: false,
     linkedTaskId: task.id,
@@ -52,7 +56,7 @@ const seedProjectWork: Project = {
   workspace: 'Work',
   color: '#6366f1',
   isCompleted: false,
-  createdAt: Date.now() - 86400000 * 7,
+  createdAt: new Date().toISOString() - 86400000 * 7,
 };
 
 const seedProjectPersonal: Project = {
@@ -61,7 +65,7 @@ const seedProjectPersonal: Project = {
   workspace: 'Personal',
   color: '#3b82f6',
   isCompleted: false,
-  createdAt: Date.now() - 86400000 * 3,
+  createdAt: new Date().toISOString(),
 };
 
 const seedColumns: ProjectColumn[] = [
@@ -78,11 +82,11 @@ const initialTasks: Task[] = [
     priority: 'High',
     workspace: 'Work',
     projectId: 'proj-work',
-    createdAt: Date.now(),
+    createdAt: new Date().toISOString(),
     effort: 8,
     impact: 9,
-    startDate: Date.now(),
-    dueDate: Date.now() + 86400000 * 3,
+    startDate: new Date().toISOString(),
+    dueDate: new Date().toISOString() + 86400000 * 3,
     order: 0,
   },
   {
@@ -93,7 +97,7 @@ const initialTasks: Task[] = [
     priority: 'Medium',
     workspace: 'Personal',
     projectId: 'proj-personal',
-    createdAt: Date.now(),
+    createdAt: new Date().toISOString(),
     effort: 2,
     impact: 5,
     order: 1,
@@ -106,11 +110,11 @@ const initialTasks: Task[] = [
     priority: 'High',
     workspace: 'Work',
     projectId: 'proj-work',
-    createdAt: Date.now(),
+    createdAt: new Date().toISOString(),
     effort: 4,
     impact: 7,
-    startDate: Date.now() - 86400000,
-    dueDate: Date.now() + 86400000 * 2,
+    startDate: new Date().toISOString() - 86400000,
+    dueDate: new Date().toISOString() + 86400000 * 2,
     order: 0,
   },
   {
@@ -121,7 +125,7 @@ const initialTasks: Task[] = [
     priority: 'Medium',
     workspace: 'Work',
     projectId: 'proj-work',
-    createdAt: Date.now(),
+    createdAt: new Date().toISOString(),
     effort: 5,
     impact: 6,
     order: 2,
@@ -139,8 +143,8 @@ const initialNotes: Note[] = [
     title: 'Q3 Planning Meeting Notes',
     content: '# Q3 Goals\n- Increase user retention by 15%\n- Launch new AI features\n- Expand into European market\n\n## Action Items\n- [ ] Finalize budget\n- [ ] Hire 2 new engineers',
     workspace: 'Work',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     linkedTaskIds: ['1'],
     sectionId: 's1',
   },
@@ -150,21 +154,21 @@ const initialEvents: CalendarEvent[] = [
   {
     id: 'e1',
     title: 'Team Standup',
-    startTime: new Date().setHours(10, 0, 0, 0),
-    endTime:   new Date().setHours(10, 30, 0, 0),
+    // Wrap the setHours millisecond output in a new Date() before getting the ISO string
+    startTime: new Date(new Date().setHours(10, 0, 0, 0)),
+    endTime:   new Date(new Date().setHours(10, 30, 0, 0)),
     workspace: 'Work',
     isPrivate: false,
   },
   {
     id: 'e2',
     title: 'Lunch with Sarah',
-    startTime: new Date().setHours(12, 30, 0, 0),
-    endTime:   new Date().setHours(13, 30, 0, 0),
+    startTime: new Date(new Date().setHours(12, 30, 0, 0)),
+    endTime:   new Date(new Date().setHours(13, 30, 0, 0)),
     workspace: 'Personal',
     isPrivate: true,
   },
 ];
-
 const initialProfiles: Profile[] = [
   { id: '1', name: 'Work',     color: '#6366f1', icon: 'Briefcase' },
   { id: '2', name: 'Personal', color: '#3b82f6', icon: 'Home' },
@@ -299,7 +303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
     const maxOrder = statusTasks.length > 0
       ? Math.max(...statusTasks.map(t => t.order ?? 0)) + 1 : 0;
-    const newTask: Task = { ...task, id, createdAt: Date.now(), order: maxOrder };
+    const newTask: Task = { ...task, id, createdAt: new Date().toISOString(), order: maxOrder };
 
     let newEvents = state.events;
     if (task.addToCalendar && task.dueDate) {
@@ -329,13 +333,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         newEvents = state.events.map((e, idx) => {
           if (idx !== linkedIdx) return e;
           const [h, m] = updated.time ? updated.time.split(':').map(Number) : [9, 0];
-          const base = new Date(updated.dueDate!);
+          const base = new Date(updated.dueDate!).toISOString();
           base.setHours(h, m, 0, 0);
           const ev = {
             ...e,
             title: updated.title ?? e.title,
-            startTime: base.getTime(),
-            endTime: base.getTime() + (state.settings.defaultTaskDuration ?? 30) * 60_000,
+            // Convert these milliseconds into ISO strings before sending to DB
+            startTime: new Date(base.getTime()).toISOString(),
+            endTime: new Date(base.getTime() + (state.settings.defaultTaskDuration ?? 30) * 60_000).toISOString(),
           };
           NexusDB.put('events', ev);
           return ev;
@@ -392,8 +397,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newNote: Note = {
       ...note,
       id: (note as any).id ?? uuidv4(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     NexusDB.put('notes', newNote);
     return { notes: [...state.notes, newNote] };
@@ -401,7 +406,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateNote: (id, updates) => set((state) => {
     const updated = state.notes.map(n =>
-      n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n
+      n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n
     );
     const note = updated.find(n => n.id === id);
     if (note) NexusDB.put('notes', note);
@@ -435,15 +440,31 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Events ────────────────────────────────────────────────────────────────
   addEvent: (event) => set((state) => {
-    const newEvent: CalendarEvent = { ...event, id: uuidv4() };
+    const newEvent: CalendarEvent = { 
+      ...event, 
+      id: event.id ?? uuidv4(),
+      // Ensure ISO format for Supabase timestamptz
+      startTime: event.startTime ? new Date(event.startTime).toISOString() : event.startTime,
+      endTime: event.endTime ? new Date(event.endTime).toISOString() : event.endTime,
+    };
     NexusDB.put('events', newEvent);
     return { events: [...state.events, newEvent] };
   }),
 
   updateEvent: (id, updates) => set((state) => {
-    const updated = state.events.map(e => e.id === id ? { ...e, ...updates } : e);
+    // Sanitize any incoming date updates to ISO strings
+    const sanitizedUpdates = { ...updates };
+    if (sanitizedUpdates.startTime) {
+      sanitizedUpdates.startTime = new Date(sanitizedUpdates.startTime).toISOString();
+    }
+    if (sanitizedUpdates.endTime) {
+      sanitizedUpdates.endTime = new Date(sanitizedUpdates.endTime).toISOString();
+    }
+
+    const updated = state.events.map(e => e.id === id ? { ...e, ...sanitizedUpdates } : e);
     const event = updated.find(e => e.id === id);
     if (event) NexusDB.put('events', event);
+    
     return { events: updated };
   }),
 
@@ -482,7 +503,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Projects ──────────────────────────────────────────────────────────────
   addProject: (project) => set((state) => {
     const id = uuidv4();
-    const newProject: Project = { ...project, id, createdAt: Date.now() };
+    const newProject: Project = { ...project, id, createdAt: new Date().toISOString() };
     const cols = makeDefaultColumns(id);
     NexusDB.put('projects', newProject);
     cols.forEach(c => NexusDB.put('projectColumns', c));
