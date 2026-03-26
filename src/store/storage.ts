@@ -251,6 +251,9 @@ export const NexusDB = {
         settings:       state.settings,
         profiles:       state.profiles,
         noteSections:   state.noteSections,
+        spendingTransactions: state.spendingTransactions,
+        spendingBudgets:      state.spendingBudgets,
+        spendingGoals:        state.spendingGoals,
       };
     } catch {
       return null;

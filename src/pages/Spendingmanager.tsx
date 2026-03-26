@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useNexusStorage } from '@/hooks/useNexusStorage' 
+import { useNexusItems, useNexusBudgets } from '@/hooks/useNexusSpendingStorage';
 import {
   Wallet, Plus, Trash2, TrendingUp, TrendingDown, Search,
   ShoppingCart, Coffee, Car, Home, Utensils, Zap, Tag,
@@ -891,35 +892,43 @@ function RecurringManager({transactions,onClose,onUpdate,onDelete}:{
 
 // ─── Local storage hook ───────────────────────────────────────────────────────
 
-function useLocalStorage<T>(key: string, initialValue: T | (()=>T)): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState<T>(()=>{
-    try {
-      const stored = localStorage.getItem(key);
-      if (stored !== null) return JSON.parse(stored) as T;
-    } catch {}
-    return typeof initialValue === 'function' ? (initialValue as ()=>T)() : initialValue;
-  });
+// function useLocalStorage<T>(key: string, initialValue: T | (()=>T)): [T, React.Dispatch<React.SetStateAction<T>>] {
+//   const [value, setValue] = useState<T>(()=>{
+//     try {
+//       const stored = localStorage.getItem(key);
+//       if (stored !== null) return JSON.parse(stored) as T;
+//     } catch {}
+//     return typeof initialValue === 'function' ? (initialValue as ()=>T)() : initialValue;
+//   });
 
-  const setAndPersist: React.Dispatch<React.SetStateAction<T>> = useCallback((action) => {
-    setValue(prev => {
-      const next = typeof action === 'function' ? (action as (p:T)=>T)(prev) : action;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, [key]);
+//   const setAndPersist: React.Dispatch<React.SetStateAction<T>> = useCallback((action) => {
+//     setValue(prev => {
+//       const next = typeof action === 'function' ? (action as (p:T)=>T)(prev) : action;
+//       try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+//       return next;
+//     });
+//   }, [key]);
 
-  return [value, setAndPersist];
-}
+//   return [value, setAndPersist];
+// }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function SpendingManager(){
-  const [transactions, setTransactions] = useLocalStorage<Transaction[]>('nexus_spending_txs', makeSeed);
-  const [budgets,      setBudgets]      = useLocalStorage<Budget[]>('nexus_spending_budgets', DEFAULT_BUDGETS);
-  const [goals,        setGoals]        = useLocalStorage<Goal[]>('nexus_spending_goals', [
-    {id:'g1',label:'Emergency Fund',targetAmount:5000,savedAmount:1540,color:'#6366f1'},
-    {id:'g2',label:'Holiday 2026',  targetAmount:2000,savedAmount:650, color:'#f59e0b'},
-  ]);
+const [transactions, setTransactions] = useNexusItems<Transaction>(
+  'spendingTransactions',
+  makeSeed, // shown instantly while the async load resolves
+);
+ 
+const [budgets, setBudgets] = useNexusBudgets<Budget>(DEFAULT_BUDGETS);
+ 
+const [goals, setGoals] = useNexusItems<Goal>(
+  'spendingGoals',
+  [
+    { id: 'g1', label: 'Emergency Fund', targetAmount: 5000, savedAmount: 1540, color: '#6366f1' },
+    { id: 'g2', label: 'Holiday 2026',   targetAmount: 2000, savedAmount: 650,  color: '#f59e0b' },
+  ],
+);
   const [timeRange,    setTimeRange]    = useState<TimeRange>('month');
   const [chartView,    setChartView]    = useState<ChartView>('percent');
   const [catSort,      setCatSort]      = useState<CatSort>('spend');
@@ -939,7 +948,7 @@ export function SpendingManager(){
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
   const [dismissedAlerts, setDismissed] = useState<Set<string>>(new Set());
   const [activeCard,     setActiveCard]     = useState<ActiveCard>(null);
-  const [cycleStartDay,  setCycleStartDay]  = useLocalStorage<number>('nexus_spending_cycle_day', 1);
+  const [cycleStartDay,  setCycleStartDay]  = useNexusStorage<number>('nexus_spending_cycle_day', 1);
   const [showCycleSettings, setShowCycleSettings] = useState(false);
   const [showTrends,     setShowTrends]     = useState(false);
   const [showRecurring,  setShowRecurring]  = useState(false);

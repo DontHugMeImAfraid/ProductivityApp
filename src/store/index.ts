@@ -226,7 +226,7 @@ function debouncedWrite(store: 'notes' | 'tasks' | 'events' | 'projects' | 'proj
 let _initDone = false;
 
 async function loadPersistedState(): Promise<Partial<AppState>> {
-  const legacy = await NexusDB.migrateFromLegacy();
+   const legacy = await NexusDB.migrateFromLegacy();
   if (legacy) {
     await Promise.all([
       NexusDB.replaceAll('notes',          legacy.notes),
@@ -234,6 +234,21 @@ async function loadPersistedState(): Promise<Partial<AppState>> {
       NexusDB.replaceAll('events',         legacy.events),
       NexusDB.replaceAll('projects',       legacy.projects),
       NexusDB.replaceAll('projectColumns', legacy.projectColumns),
+      // ── Spending data migration (new) ─────────────────────────────────────
+      // replaceAll writes to IDB; the NexusDB hooks in SpendingManager will
+      // then pick them up on next mount and push them to Supabase via put().
+      ...(legacy.spendingTransactions?.length
+        ? [NexusDB.replaceAll('spendingTransactions', legacy.spendingTransactions)]
+        : []),
+      ...(legacy.spendingBudgets?.length
+        ? [NexusDB.replaceAll('spendingBudgets',
+            // Attach the synthetic id (category) so IDB keyPath is satisfied.
+            legacy.spendingBudgets.map((b: any) => ({ ...b, id: b.id ?? b.category }))
+          )]
+        : []),
+      ...(legacy.spendingGoals?.length
+        ? [NexusDB.replaceAll('spendingGoals', legacy.spendingGoals)]
+        : []),
     ]);
     if (legacy.settings)     NexusDB.lsSet('settings',     legacy.settings);
     if (legacy.profiles)     NexusDB.lsSet('profiles',     legacy.profiles);

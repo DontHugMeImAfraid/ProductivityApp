@@ -135,6 +135,7 @@ export interface CalendarEvent {
   recurringDays?: number[];
 }
 
+
 export interface AppState {
   workspace: Workspace;
   currentView: string;
