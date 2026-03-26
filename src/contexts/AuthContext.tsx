@@ -6,7 +6,7 @@ import { CognitoUserPool, CognitoUser, CognitoUserSession } from 'amazon-cognito
 export const COGNITO_CONFIG = {
   UserPoolId: 'eu-north-1_I7V7XHbtJ',
   ClientId: '7io3gvj0rggnp3p826dfeefpih',
-  hostedUiDomain: 'http://nexus-app-123.s3-website.eu-north-1.amazonaws.com',
+  hostedUiDomain: 'https://eu-north-1i7v7xhbtj.auth.eu-north-1.amazoncognito.com',
   redirectUri: window.location.origin,
 };
 
