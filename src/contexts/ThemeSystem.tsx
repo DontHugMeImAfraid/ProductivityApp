@@ -282,39 +282,89 @@ export const PRESET_THEMES: Theme[] = [
   // ─── OBSIDIAN ────────────────────────────────────────────────────────────
   // textMuted was #666666 (~3.8:1 on #1a1a1a) — fail
   // textSecondary #a0a0a0 was ok but borderline
-  {
-    id: 'obsidian', name: 'Obsidian', isDark: true, emoji: '🪨',
-    colors: {
-      bgPrimary:    '#1a1a1a',
-      bgSecondary:  '#222222',
-      bgTertiary:   '#2a2a2a',
-      bgElevated:   '#242424',
-      bgSurface:    '#1e1e1e',
-      textPrimary:   '#f0f0f0',   // was #e8e8e8 — slightly brighter
-      textSecondary: '#c0c0c0',   // was #a0a0a0 (~5:1) → ~7:1 ✓
-      textMuted:     '#959595',   // was #666666 (~3.8:1) → ~4.8:1 ✓
-      textInverse:   '#1a1a1a',
-      accent:        '#d4a017',
-      accentHover:   '#b8880f',
-      accentLight:   '#2e2308',   // was #2a2410 — a touch more visible
-      accentText:    '#f0c040',   // was #d4a017 — lighter for reading on dark accentLight
-      border:        '#404040',   // was #333333 — more visible
-      borderStrong:  '#555555',   // was #444444
-      shadow:        'rgba(0,0,0,0.55)',
-      success: '#6bcb77', warning: '#f0c040', danger: '#ff6b6b', info: '#74b9ff',
-      sidebarBg:       '#1a1a1a',
-      sidebarText:     '#c0c0c0',
-      sidebarActive:   '#f0c040',   // was #d4a017 — lighter
-      sidebarActiveBg: '#2e2308',
-      calendarBg: '#222222', calendarToday: '#d4a017', calendarEvent: '#d4a017',
-      notesBg: '#1a1a1a', editorBg: '#111111',
-      codeBlockBg: '#111111', codeBlockText: '#f0f0f0',
-      cardBg: '#222222', inputBg: '#111111', inputBorder: '#404040',
-      buttonBg: '#d4a017', buttonText: '#1a1a1a',
-    },
-    typography: { fontFamily: "'Trebuchet MS', system-ui, sans-serif", editorFont: 'Georgia, serif', monoFont: "'Consolas', monospace", baseFontSize: 15, lineHeight: 1.6, letterSpacing: '0em' },
-    layout: { density: 'comfortable', borderRadius: '6px', buttonRadius: '4px', cardStyle: 'bordered', sidebarWidth: 256 },
+ {
+  id: 'chocolate',
+  name: 'Chocolate',
+  isDark: true,
+  emoji: '🍫',
+
+  colors: {
+    // 🌑 BACKGROUNDS (rich cocoa layers)
+    bgPrimary:    '#1a1412',   // deep cocoa (main app bg)
+    bgSecondary:  '#241c1a',   // panels
+    bgTertiary:   '#2f2522',   // elevated sections
+    bgElevated:   '#3a2e2a',   // cards hover / modals
+    bgSurface:    '#140f0e',   // deepest contrast layer
+
+    // 📝 TEXT (warm readable tones)
+    textPrimary:   '#f5e6d8',  // soft cream (main text)
+    textSecondary: '#d2b8a3',  // muted caramel
+    textMuted:     '#9a8275',  // low emphasis
+    textInverse:   '#1a1412',
+
+    // ✨ ACCENTS (gold / caramel)
+    accent:        '#d4a017',  // gold (keep)
+    accentHover:   '#b8880f',
+    accentLight:   '#3a2b0c',  // subtle glow bg
+    accentText:    '#f6d36b',  // readable on dark gold bg
+
+    // 🧱 BORDERS / DEPTH
+    border:        '#3a2e2a',
+    borderStrong:  '#4a3a35',
+    shadow:        'rgba(0,0,0,0.6)',
+
+    // 🚦 STATUS
+    success: '#6bcb77',
+    warning: '#f0c040',
+    danger:  '#ff6b6b',
+    info:    '#74b9ff',
+
+    // 📌 SIDEBAR (slightly darker for hierarchy)
+    sidebarBg:       '#140f0e',
+    sidebarText:     '#cbb3a3',
+    sidebarActive:   '#f0d28a',
+    sidebarActiveBg: '#3a2b0c',
+
+    // 📅 CALENDAR
+    calendarBg:    '#211917',
+    calendarToday: '#d4a017',
+    calendarEvent: '#c29512',
+
+    // 📝 NOTES / EDITOR
+    notesBg:   '#2a1f1c',
+    editorBg:  '#120e0d',
+
+    // 💻 CODE
+    codeBlockBg:   '#120e0d',
+    codeBlockText: '#f5e6d8',
+
+    // 🧩 UI ELEMENTS
+    cardBg:      '#211917',
+    inputBg:     '#120e0d',
+    inputBorder: '#3a2e2a',
+
+    // 🔘 BUTTONS
+    buttonBg:   '#d4a017',
+    buttonText: '#1a1412',
   },
+
+  typography: {
+    fontFamily: "'Trebuchet MS', system-ui, sans-serif",
+    editorFont: 'Georgia, serif',
+    monoFont: "'Consolas', monospace",
+    baseFontSize: 15,
+    lineHeight: 1.6,
+    letterSpacing: '0em'
+  },
+
+  layout: {
+    density: 'comfortable',
+    borderRadius: '8px',       // slightly smoother
+    buttonRadius: '6px',
+    cardStyle: 'bordered',
+    sidebarWidth: 256
+  }
+},
 
   // ─── NORD ────────────────────────────────────────────────────────────────
   // textMuted was #4c566a (~2.3:1 on #2e3440) — extreme fail
