@@ -17,8 +17,9 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Category = 'Food'|'Transport'|'Housing'|'Shopping'|'Utilities'|'Entertainment'|'Health'|'Other'
-              | 'Salary'|'Bonus'|'Freelance'|'Investments'|'Refunds'|'Gifts';
+
+type Category = 'EATING_OUT'|'TRANSPORT'|'RENT'|'SHOPPING'|'BILLS_AND_SERVICES'|'ENTERTAINMENT'|'LIFESTYLE'|'Other'
+              | 'INCOME'|'Bonus'|'Freelance'|'Investments'|'Refunds'|'Gifts';
 type TxType    = 'expense'|'income';
 type TimeRange = 'week'|'month'|'year'|'all';
 type ChartView = 'percent'|'amount';
@@ -26,6 +27,7 @@ type GroupBy   = 'date'|'category'|'none';
 type CatSort   = 'spend'|'increase'|'overbudget';
 type AlertSeverity = 'warning'|'critical'|'info';
 type ActiveCard = 'balance'|'income'|'expenses'|'subscriptions'|null;
+type description = 'test'
 
 interface Transaction {
   id: string; label: string; amount: number; category: Category;
@@ -33,7 +35,7 @@ interface Transaction {
   isRecurring?: boolean; recurrenceRule?: 'daily'|'weekly'|'monthly';
   isPinned?: boolean;
 }
-interface Budget { category: Category; limit: number; }
+interface Budget {category: Category; limit: number; }
 interface Goal {
   id: string; label: string; targetAmount: number; savedAmount: number;
   deadline?: string; color: string;
@@ -46,18 +48,18 @@ interface SmartAlert {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CATEGORIES: { name: Category; icon: React.FC<any>; color: string; bg: string }[] = [
-  { name:'Food',          icon:Utensils,       color:'#f97316', bg:'#fff7ed' },
-  { name:'Transport',     icon:Car,            color:'#3b82f6', bg:'#eff6ff' },
-  { name:'Housing',       icon:Home,           color:'#8b5cf6', bg:'#f5f3ff' },
-  { name:'Shopping',      icon:ShoppingCart,   color:'#ec4899', bg:'#fdf2f8' },
-  { name:'Utilities',     icon:Zap,            color:'#eab308', bg:'#fefce8' },
-  { name:'Entertainment', icon:Coffee,         color:'#14b8a6', bg:'#f0fdfa' },
-  { name:'Health',        icon:Tag,            color:'#10b981', bg:'#f0fdf4' },
+  { name:'EATING_OUT',    icon:Utensils,       color:'#f97316', bg:'#fff7ed' },
+  { name:'TRANSPORT',     icon:Car,            color:'#3b82f6', bg:'#eff6ff' },
+  { name:'RENT',       icon:Home,           color:'#8b5cf6', bg:'#f5f3ff' },
+  { name:'SHOPPING',      icon:ShoppingCart,   color:'#ec4899', bg:'#fdf2f8' },
+  { name:'BILLS_AND_SERVICES',     icon:Zap,            color:'#eab308', bg:'#fefce8' },
+  { name:'ENTERTAINMENT', icon:Coffee,         color:'#14b8a6', bg:'#f0fdfa' },
+  { name:'LIFESTYLE',        icon:Tag,            color:'#10b981', bg:'#f0fdf4' },
   { name:'Other',         icon:MoreHorizontal, color:'#6b7280', bg:'#f9fafb' },
 ];
 
 const INCOME_CATEGORIES: { name: Category; icon: React.FC<any>; color: string; bg: string }[] = [
-  { name:'Salary',      icon:DollarSign,     color:'#16a34a', bg:'#f0fdf4' },
+  { name:'INCOME',      icon:DollarSign,     color:'#16a34a', bg:'#f0fdf4' },
   { name:'Bonus',       icon:Star,           color:'#d97706', bg:'#fffbeb' },
   { name:'Freelance',   icon:Zap,            color:'#7c3aed', bg:'#f5f3ff' },
   { name:'Investments', icon:TrendingUp,     color:'#0891b2', bg:'#f0f9ff' },
@@ -67,10 +69,14 @@ const INCOME_CATEGORIES: { name: Category; icon: React.FC<any>; color: string; b
 ];
 
 const DEFAULT_BUDGETS: Budget[] = [
-  { category:'Food',limit:300 },{ category:'Transport',limit:150 },
-  { category:'Housing',limit:1300 },{ category:'Shopping',limit:200 },
-  { category:'Utilities',limit:100 },{ category:'Entertainment',limit:80 },
-  { category:'Health',limit:100 },{ category:'Other',limit:100 },
+  { category:'EATING_OUT',limit:300 },
+  { category:'TRANSPORT',limit:150 },
+  { category:'RENT',limit:1300 },
+  { category:'SHOPPING',limit:200 },
+  { category:'BILLS_AND_SERVICES',limit:100 },
+  { category:'ENTERTAINMENT',limit:80 },
+  { category:'LIFESTYLE',limit:100 },
+  { category:'Other',limit:100 },
 ];
 
 const GOAL_COLORS = ['#6366f1','#10b981','#f59e0b','#ec4899','#3b82f6','#8b5cf6'];
@@ -84,26 +90,26 @@ function makeSeed(): Transaction[] {
     return `${yr}-${String(mn+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   };
   return [
-    {id:'1', label:'Rent',         amount:1200,category:'Housing',      type:'expense',date:d(0,1), isRecurring:true,recurrenceRule:'monthly',isPinned:true},
-    {id:'2', label:'Groceries',    amount:85,  category:'Food',         type:'expense',date:d(0,3), tags:['#weekly']},
-    {id:'3', label:'Salary',       amount:3200,category:'Other',        type:'income', date:d(0,5), isRecurring:true,recurrenceRule:'monthly',isPinned:true},
-    {id:'4', label:'Electric Bill',amount:62,  category:'Utilities',    type:'expense',date:d(0,7), isRecurring:true,recurrenceRule:'monthly'},
-    {id:'5', label:'Bus Pass',     amount:35,  category:'Transport',    type:'expense',date:d(0,9)},
-    {id:'6', label:'Dinner Out',   amount:47,  category:'Food',         type:'expense',date:d(0,12),note:'Birthday dinner'},
-    {id:'7', label:'New Shoes',    amount:120, category:'Shopping',     type:'expense',date:d(0,14)},
-    {id:'8', label:'Netflix',      amount:16,  category:'Entertainment',type:'expense',date:d(0,15),isRecurring:true,recurrenceRule:'monthly',tags:['#subscription']},
-    {id:'9', label:'Pharmacy',     amount:28,  category:'Health',       type:'expense',date:d(0,16)},
-    {id:'10',label:'Coffee Shop',  amount:22,  category:'Food',         type:'expense',date:d(0,17),tags:['#daily']},
-    {id:'11',label:'Spotify',      amount:10,  category:'Entertainment',type:'expense',date:d(0,17),isRecurring:true,recurrenceRule:'monthly',tags:['#subscription']},
-    {id:'12',label:'Rent',         amount:1200,category:'Housing',      type:'expense',date:d(-1,1)},
-    {id:'13',label:'Groceries',    amount:95,  category:'Food',         type:'expense',date:d(-1,4)},
-    {id:'14',label:'Salary',       amount:3200,category:'Other',        type:'income', date:d(-1,5)},
-    {id:'15',label:'Electric Bill',amount:70,  category:'Utilities',    type:'expense',date:d(-1,8)},
-    {id:'16',label:'Transport',    amount:40,  category:'Transport',    type:'expense',date:d(-1,10)},
-    {id:'17',label:'Groceries',    amount:72,  category:'Food',         type:'expense',date:d(-1,18)},
-    {id:'18',label:'Netflix',      amount:16,  category:'Entertainment',type:'expense',date:d(-1,15)},
-    {id:'19',label:'Restaurant',   amount:55,  category:'Food',         type:'expense',date:d(-1,22)},
-    {id:'20',label:'Gym',          amount:40,  category:'Health',       type:'expense',date:d(-1,2)},
+    {id:'1', label:'Rent',         amount:1200,category:'RENT',      type:'expense',date:d(0,1), isRecurring:true,recurrenceRule:'monthly',isPinned:true},
+    {id:'2', label:'Groceries',    amount:85,  category:'EATING_OUT',         type:'expense',date:d(0,3), tags:['#weekly']},
+    {id:'3', label:'Income',       amount:3200,category:'Other',        type:'income', date:d(0,5), isRecurring:true,recurrenceRule:'monthly',isPinned:true},
+    {id:'4', label:'Electric Bill',amount:62,  category:'BILLS_AND_SERVICES',    type:'expense',date:d(0,7), isRecurring:true,recurrenceRule:'monthly'},
+    {id:'5', label:'Bus Pass',     amount:35,  category:'TRANSPORT',    type:'expense',date:d(0,9)},
+    {id:'6', label:'Dinner Out',   amount:47,  category:'EATING_OUT',         type:'expense',date:d(0,12),note:'Birthday dinner'},
+    {id:'7', label:'New Shoes',    amount:120, category:'SHOPPING',     type:'expense',date:d(0,14)},
+    {id:'8', label:'Netflix',      amount:16,  category:'ENTERTAINMENT',type:'expense',date:d(0,15),isRecurring:true,recurrenceRule:'monthly',tags:['#subscription']},
+    {id:'9', label:'Pharmacy',     amount:28,  category:'LIFESTYLE',       type:'expense',date:d(0,16)},
+    {id:'10',label:'Coffee Shop',  amount:22,  category:'EATING_OUT',         type:'expense',date:d(0,17),tags:['#daily']},
+    {id:'11',label:'Spotify',      amount:10,  category:'ENTERTAINMENT',type:'expense',date:d(0,17),isRecurring:true,recurrenceRule:'monthly',tags:['#subscription']},
+    {id:'12',label:'Rent',         amount:1200,category:'RENT',      type:'expense',date:d(-1,1)},
+    {id:'13',label:'Groceries',    amount:95,  category:'EATING_OUT',         type:'expense',date:d(-1,4)},
+    {id:'14',label:'Income',       amount:3200,category:'Other',        type:'income', date:d(-1,5)},
+    {id:'15',label:'Electric Bill',amount:70,  category:'BILLS_AND_SERVICES',    type:'expense',date:d(-1,8)},
+    {id:'16',label:'TRANSPORT',    amount:40,  category:'TRANSPORT',    type:'expense',date:d(-1,10)},
+    {id:'17',label:'Groceries',    amount:72,  category:'EATING_OUT',         type:'expense',date:d(-1,18)},
+    {id:'18',label:'Netflix',      amount:16,  category:'ENTERTAINMENT',type:'expense',date:d(-1,15)},
+    {id:'19',label:'Restaurant',   amount:55,  category:'EATING_OUT',         type:'expense',date:d(-1,22)},
+    {id:'20',label:'Gym',          amount:40,  category:'LIFESTYLE',       type:'expense',date:d(-1,2)},
   ];
 }
 
@@ -424,7 +430,7 @@ function TxModal({initial,lastCategory,onClose,onSave}:{
   const [amount,setAmount]    =useState(initial?String(initial.amount):'');
   const [type,setType]        =useState<TxType>(initial?.type??'expense');
   const [category,setCategory]=useState<Category>(
-    initial?.category??( (initial?.type??'expense')==='expense'?(lastCategory??'Food'):'Salary' )
+    initial?.category??( (initial?.type??'EATING_OUT')==='expense'?(lastCategory??'EATING_OUT'):'INCOME' )
   );
   const [date,setDate]        =useState(initial?.date??new Date().toISOString().slice(0,10));
   const [note,setNote]        =useState(initial?.note??'');
@@ -437,7 +443,7 @@ function TxModal({initial,lastCategory,onClose,onSave}:{
   const handleTypeChange=(t:TxType)=>{
     setType(t);
     // Reset to sensible default for the new type; clear any incompatible category
-    setCategory(t==='expense'?'Food':'Salary');
+    setCategory(t==='expense'?'EATING_OUT':'INCOME');
   };
 
   const save=()=>{
@@ -1217,6 +1223,96 @@ const [goals, setGoals] = useNexusItems<Goal>(
     a.click(); URL.revokeObjectURL(url);
   },[filtered]);
 
+  // ── CSV Import ────────────────────────────────────────────────────────────
+  const importCSV = useCallback(() => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,text/csv';
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return;
+
+      // Parse header row (handle BOM)
+      const header = lines[0].replace(/^\uFEFF/, '').split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const isBankFormat = header.includes('Counter Party');
+
+      const parseRow = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (const char of line) {
+          if (char === '"') { inQuotes = !inQuotes; continue; }
+          if (char === ',' && !inQuotes) { result.push(current); current = ''; continue; }
+          current += char;
+        }
+        result.push(current);
+        return result;
+      };
+
+      const toISODate = (raw: string): string => {
+        // Bank format: DD/MM/YYYY → YYYY-MM-DD
+        const ddmmyyyy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (ddmmyyyy) return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+        return raw; // Already ISO
+      };
+
+      const newTransactions: Transaction[] = lines.slice(1)
+        .filter(l => l.trim())
+        .map((line) => {
+          const cols = parseRow(line);
+          const row: Record<string, string> = {};
+          header.forEach((h, i) => { row[h] = (cols[i] ?? '').trim(); });
+
+          if (isBankFormat) {
+            const rawAmount = parseFloat(row['Amount (GBP)'] ?? '0');
+            const type: 'income' | 'expense' = rawAmount >= 0 ? 'income' : 'expense';
+            return {
+              id: crypto.randomUUID(),
+              date: toISODate(row['Date'] ?? ''),
+              label: row['Counter Party'] || 'Unknown',
+              amount: Math.abs(rawAmount),
+              type,
+              category: row['Spending Category'] || 'Other',
+              note: row['Notes'] || row['Reference'] || '',
+              tags: [],
+              isRecurring: false,
+            };
+          } else {
+            // Your own export format
+            const recurringRaw = row['Recurring'] ?? '';
+            return {
+              id: crypto.randomUUID(),
+              date: row['Date'] ?? '',
+              label: row['Label'] || 'Unknown',
+              amount: parseFloat(row['Amount'] ?? '0'),
+              type: (row['Type'] ?? 'expense') as 'income' | 'expense',
+              category: row['Category'] || 'Other',
+              note: row['Note'] ?? '',
+              tags: row['Tags'] ? row['Tags'].split(' ').filter(Boolean) : [],
+              isRecurring: !!recurringRaw,
+              recurrenceRule: recurringRaw && recurringRaw !== 'yes' ? recurringRaw : undefined,
+            };
+          }
+        });
+
+      // Merge with existing — skip duplicates by date+label+amount
+      setTransactions(prev => {
+        const existing = new Set(prev.map(t => `${t.date}|${t.label}|${t.amount}`));
+        const fresh = newTransactions.filter(t => !existing.has(`${t.date}|${t.label}|${t.amount}`));
+        return [...prev, ...fresh];
+      });
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}, [setTransactions]);
+
+
   // ── RENDER ────────────────────────────────────────────────────────────────
   return(
     <div className="h-full overflow-y-auto bg-slate-50">
@@ -1761,6 +1857,10 @@ const [goals, setGoals] = useNexusItems<Goal>(
                   <button onClick={exportCSV}
                     className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors border border-emerald-200 rounded-lg px-2 py-0.5 hover:bg-emerald-50">
                     <ArrowUpRight className="w-3 h-3"/>Export CSV
+                  </button>
+                  <button onClick={importCSV}
+                    className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium transition-colors border border-orange-200 rounded-lg px-2 py-0.5 hover:bg-orange-50">
+                    <ArrowUpRight className="w-3 h-3"/>Import CSV
                   </button>
                 </div>
                 <span className="text-xs font-semibold text-slate-600">
