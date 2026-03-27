@@ -71,11 +71,11 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
 
   if (isEditing) {
     return (
-      <div className="max-w-[800px] mx-auto w-full h-full">
+      <div className="max-w-[800px] mx-auto w-full h-full px-4 md:px-0">
         <textarea
           value={content}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full h-full min-h-[500px] p-4 font-mono text-sm bg-transparent border-none resize-none focus:ring-0 focus:outline-none"
+          className="w-full h-full min-h-[500px] p-4 font-mono text-sm md:text-base bg-transparent border-none resize-none focus:ring-0 focus:outline-none"
           placeholder={`Start typing… (Markdown supported)\n---\npriority: high\n---`}
           autoFocus
         />
@@ -89,12 +89,12 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
   // Only interactive elements (checkboxes, frontmatter controls, links) stop
   // propagation so clicks on them don't bubble up to parent containers.
   return (
-    <div className="max-w-[800px] mx-auto w-full pb-32">
+    <div className="max-w-[800px] mx-auto w-full pb-32 px-4 md:px-0">
       {/* Frontmatter properties grid */}
       {frontmatter && Object.keys(frontmatter).length > 0 && (
-        <div className="mb-8 p-4 bg-zinc-50/50 border border-zinc-200 rounded-xl">
+        <div className="mb-8 p-3 md:p-4 bg-zinc-50/50 border border-zinc-200 rounded-xl">
           <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Properties</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {Object.entries(frontmatter).map(([key, value]) => (
               <div key={key} className="flex flex-col gap-1">
                 <span className="text-xs text-zinc-500 capitalize">{key.replace(/-/g, ' ')}</span>

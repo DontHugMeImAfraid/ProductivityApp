@@ -919,7 +919,9 @@ const [transactions, setTransactions] = useNexusItems<Transaction>(
   'spendingTransactions',
   makeSeed, // shown instantly while the async load resolves
 );
- 
+
+
+
 const [budgets, setBudgets] = useNexusBudgets<Budget>(DEFAULT_BUDGETS);
  
 const [goals, setGoals] = useNexusItems<Goal>(

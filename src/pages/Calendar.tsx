@@ -782,6 +782,7 @@ export function CalendarView() {
   const [overflowPop,  setOverflowPop]  = useState<{ key: string; date: Date } | null>(null);
   const [ctxMenu,      setCtxMenu]      = useState<{ event: RichEvent; x: number; y: number } | null>(null);
   const [activeCats,   setActiveCats]   = useState<Set<EventCategory>>(new Set());
+  const [showSidebar,  setShowSidebar]  = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const wsEvs  = useMemo(() => (events as RichEvent[]).filter(e => e.workspace === workspace), [events, workspace]);
@@ -1165,10 +1166,41 @@ export function CalendarView() {
 
   return (
     <div className="h-full flex overflow-hidden bg-white">
+      {/* Mobile sidebar toggle button */}
+      <button
+        onClick={() => setShowSidebar(!showSidebar)}
+        className="md:hidden fixed bottom-6 right-6 z-40 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+      >
+        <CalendarIcon className="w-6 h-6" />
+      </button>
+
+      {/* Mobile overlay */}
+      {showSidebar && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-52 shrink-0 border-r border-zinc-200 flex flex-col overflow-hidden bg-white">
+      <div className={cn(
+        "w-52 shrink-0 border-r border-zinc-200 flex flex-col overflow-hidden bg-white transition-transform duration-300 ease-in-out",
+        "md:relative md:translate-x-0",
+        "fixed inset-y-0 left-0 z-40",
+        showSidebar ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {/* Close button for mobile */}
+        <div className="md:hidden flex justify-end p-2 border-b border-zinc-100">
+          <button
+            onClick={() => setShowSidebar(false)}
+            className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
         <MiniCalendar currentDate={currentDate} activeDate={currentDate} events={filteredEvs}
-          onSelectDay={d => { setCurrentDate(d); if (calView === 'month') setCalView('day'); }}
+          onSelectDay={d => { setCurrentDate(d); if (calView === 'month') setCalView('day'); setShowSidebar(false); }}
           onMonthChange={setCurrentDate} />
 
         {/* Category filters */}

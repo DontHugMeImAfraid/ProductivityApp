@@ -965,6 +965,7 @@ export function Notes() {
   const [showCtxPanelFor,   setShowCtxPanelFor]   = useState<string|null>(null);
   const [showQuickCapture,  setShowQuickCapture]  = useState(false);
   const [showDashboard,     setShowDashboard]     = useState(false);
+  const [showSidebar,       setShowSidebar]       = useState(false);
 
   const workspaceNotes    = useMemo(() => notes.filter(n => n.workspace === workspace), [notes, workspace]);
   const workspaceSections = useMemo(() => noteSections.filter(s => s.workspace === workspace), [noteSections, workspace]);
@@ -1137,7 +1138,7 @@ export function Notes() {
     return (
       <div ref={provided?.innerRef} {...(provided?.draggableProps ?? {})} {...(provided?.dragHandleProps ?? {})}
         key={note.id}
-        onClick={() => openNoteInActivePane(note.id)}
+        onClick={() => { openNoteInActivePane(note.id); setShowSidebar(false); }}
         onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }}
         className="note-list-item group flex flex-col gap-0.5 px-3 py-2.5 rounded-xl cursor-pointer select-none transition-all"
         style={{
@@ -1193,8 +1194,40 @@ export function Notes() {
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="flex h-full overflow-hidden notes-sidebar" style={{ background: theme.colors.bgSecondary }}>
 
+        {/* Mobile sidebar toggle button */}
+        <button
+          onClick={() => setShowSidebar(!showSidebar)}
+          className="md:hidden fixed bottom-6 left-6 z-40 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+        >
+          <FileText className="w-6 h-6" />
+        </button>
+
+        {/* Mobile overlay */}
+        {showSidebar && (
+          <div 
+            className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
+
         {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-        <div className="notes-sidebar flex flex-col shrink-0 overflow-hidden" style={{ width: sidebarWidth, background: theme.colors.bgSecondary, borderRight: `1px solid ${theme.colors.border}` }}>
+        <div className={cn(
+          "notes-sidebar flex flex-col shrink-0 overflow-hidden transition-transform duration-300 ease-in-out",
+          "md:relative md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40",
+          showSidebar ? "translate-x-0" : "-translate-x-full"
+        )} style={{ width: sidebarWidth, background: theme.colors.bgSecondary, borderRight: `1px solid ${theme.colors.border}` }}>
+          
+          {/* Close button for mobile */}
+          <div className="md:hidden flex justify-end p-2" style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
+            <button
+              onClick={() => setShowSidebar(false)}
+              className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
           <div className="p-3 space-y-2" style={{ borderBottom: `1px solid ${theme.colors.border}`, background: theme.colors.cardBg }}>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: theme.colors.textMuted }} />
