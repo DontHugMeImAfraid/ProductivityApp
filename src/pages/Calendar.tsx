@@ -783,10 +783,16 @@ export function CalendarView() {
   const [ctxMenu,      setCtxMenu]      = useState<{ event: RichEvent; x: number; y: number } | null>(null);
   const [activeCats,   setActiveCats]   = useState<Set<EventCategory>>(new Set());
   const [showSidebar,  setShowSidebar]  = useState(false);
+  
+  // Profile filtering state
+  const allProfiles = ['Work', 'Personal', 'School'] as const;
+  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set(allProfiles));
+  const [showProfileFilter, setShowProfileFilter] = useState(false);
+  
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const wsEvs  = useMemo(() => (events as RichEvent[]).filter(e => e.workspace === workspace), [events, workspace]);
-  const wsTasks = useMemo(() => tasks.filter(t => t.workspace === workspace), [tasks, workspace]);
+  const wsEvs  = useMemo(() => (events as RichEvent[]).filter(e => selectedProfiles.has(e.workspace)), [events, selectedProfiles]);
+  const wsTasks = useMemo(() => tasks.filter(t => selectedProfiles.has(t.workspace)), [tasks, selectedProfiles]);
 
   // Category filter: empty set = show all
   const filteredEvs = useMemo(() =>
@@ -800,6 +806,25 @@ export function CalendarView() {
     setOverflowPop(null); setCtxMenu(null); setQuickEd(null);
   }, []);
   const closeModal = () => { setModalOpen(false); setEditingEv(null); setPreData(undefined); };
+  
+  // Profile filter functions
+  const toggleProfile = (profile: string) => {
+    setSelectedProfiles(prev => {
+      const next = new Set(prev);
+      if (next.has(profile)) {
+        // Don't allow deselecting all profiles
+        if (next.size > 1) next.delete(profile);
+      } else {
+        next.add(profile);
+      }
+      return next;
+    });
+  };
+  
+  const selectAllProfiles = () => {
+    setSelectedProfiles(new Set(allProfiles));
+  };
+  
   const handleSave = (data: Partial<RichEvent>) => {
     if (editingEv) updateEvent(editingEv.id, data);
     else addEvent({ ...data, workspace, isPrivate: data.isPrivate ?? false } as Omit<CalendarEvent, 'id'>);
@@ -1264,6 +1289,65 @@ export function CalendarView() {
                 </button>
               ))}
             </div>
+            
+            {/* Profile Filter */}
+            <div className="relative">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setShowProfileFilter(!showProfileFilter)}
+              >
+                <Filter className="w-3 h-3" />
+                {selectedProfiles.size === allProfiles.length ? 'All Profiles' : `${selectedProfiles.size} Profile${selectedProfiles.size > 1 ? 's' : ''}`}
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+              
+              {showProfileFilter && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowProfileFilter(false)} />
+                  <div className="absolute top-full mt-1 right-0 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="p-2 border-b border-zinc-100">
+                      <button
+                        onClick={selectAllProfiles}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 rounded-lg transition-colors"
+                      >
+                        <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center transition-all',
+                          selectedProfiles.size === allProfiles.length
+                            ? 'bg-indigo-600 border-indigo-600'
+                            : 'border-zinc-300 bg-white')}>
+                          {selectedProfiles.size === allProfiles.length && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        All Profiles
+                      </button>
+                    </div>
+                    <div className="p-2 space-y-0.5">
+                      {allProfiles.map(profile => {
+                        const profileColor = profile === 'Work' ? '#6366f1' : profile === 'Personal' ? '#10b981' : '#f59e0b';
+                        return (
+                          <button
+                            key={profile}
+                            onClick={() => toggleProfile(profile)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-lg transition-colors"
+                          >
+                            <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center transition-all',
+                              selectedProfiles.has(profile)
+                                ? 'border-transparent'
+                                : 'border-zinc-300 bg-white')}
+                              style={{ backgroundColor: selectedProfiles.has(profile) ? profileColor : undefined }}>
+                              {selectedProfiles.has(profile) && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: profileColor }} />
+                            <span className="font-medium">{profile}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowCmd(true)}>
               <CommandIcon className="w-3 h-3" /> Command <kbd className="text-[9px] text-zinc-400 ml-0.5">⌘K</kbd>
             </Button>

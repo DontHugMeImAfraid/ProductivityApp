@@ -1084,6 +1084,14 @@ export function Notes() {
       }
     });
     
+    // 4. Close all tabs containing this note across all panes
+    allPanes(ls.layout).forEach(pane => {
+      const hasTab = pane.tabs.find(t => t.id === note.id);
+      if (hasTab) {
+        dispatch({ type: 'CLOSE_TAB', paneId: pane.id, tabId: note.id });
+      }
+    });
+    
     deleteNote(note.id);
     setShowDeleteNote(null);
   };

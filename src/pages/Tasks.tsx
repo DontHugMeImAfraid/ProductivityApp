@@ -63,6 +63,14 @@ export function Tasks() {
   const currentProject    = projects.find(p => p.id === selectedProjectId);
   const workspaceProjects = projects.filter(p => p.workspace === workspace);
 
+  // Reset selected project when workspace changes
+  useEffect(() => {
+    // If current project doesn't belong to current workspace, clear selection
+    if (selectedProjectId && currentProject && currentProject.workspace !== workspace) {
+      setSelectedProjectId(null);
+    }
+  }, [workspace, selectedProjectId, currentProject, setSelectedProjectId]);
+
   const allCols     = projectColumns.filter(c => c.projectId === selectedProjectId).sort((a, b) => a.order - b.order);
   const visibleCols = allCols.filter(c => !c.isHidden);
   const hiddenCols  = allCols.filter(c => c.isHidden);
@@ -452,14 +460,40 @@ export function Tasks() {
 
   // ── No project ───────────────────────────────────────────────────────────────
 
-  if (!currentProject) {
+  // Treat as "no project" if selected project doesn't belong to current workspace
+  const hasValidProject = currentProject && currentProject.workspace === workspace;
+
+  if (!hasValidProject) {
     return (
       <div className="p-6 h-full flex flex-col">
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-slate-400">
-          <FolderKanban className="w-12 h-12 opacity-30" />
-          <p className="text-sm">No project selected</p>
-          <Button size="sm" onClick={() => setShowProjectPanel(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> Create Project
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <FolderKanban className="w-12 h-12 text-slate-300" />
+          <p className="text-sm text-slate-500 font-medium">Select or create a project to get started</p>
+          
+          {/* Show existing projects if any */}
+          {workspaceProjects.length > 0 && (
+            <div className="w-full max-w-md space-y-2">
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide px-2">Existing Projects</p>
+              <div className="space-y-1">
+                {workspaceProjects.map(project => (
+                  <button
+                    key={project.id}
+                    onClick={() => setSelectedProjectId(project.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all group"
+                  >
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
+                    <span className="text-sm font-semibold text-slate-900 flex-1 text-left">{project.name}</span>
+                    {project.isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Create project button */}
+          <Button size="sm" onClick={() => setShowProjectPanel(true)} className="mt-2">
+            <Plus className="w-3.5 h-3.5 mr-1.5" /> Create New Project
           </Button>
         </div>
         {showProjectPanel && <ProjectPanelOverlay onClose={() => setShowProjectPanel(false)} />}
