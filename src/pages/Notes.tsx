@@ -716,8 +716,10 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
               style={{ background: theme.colors.editorBg, color: theme.colors.textPrimary, minHeight: '100%' }}
               value={note.content}
               onChange={e => {
+                
                 updateNote(note.id, { content: e.target.value });
                 dispatch({ type: 'MARK_DIRTY', noteId: note.id });
+  
               }}
               onBlur={() => dispatch({ type: 'MARK_CLEAN', noteId: note.id })}
               placeholder="Start writing…"
@@ -725,7 +727,11 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
           ) : (
             <div className="note-preview-area p-5 md:p-9 min-h-full shadow-sm" style={{ background: theme.colors.cardBg }}>
               <NoteEditor content={note.content} isEditing={false} setIsEditing={setIsEditing}
-                onChange={content => { updateNote(note.id, { content }); dispatch({ type: 'MARK_DIRTY', noteId: note.id }); }} />
+                onChange={content => {
+                  console.log("Note Change")
+                  updateNote(note.id, { content }); dispatch({ type: 'MARK_DIRTY', noteId: note.id
+
+                   }); }} />
             </div>
           )}
 

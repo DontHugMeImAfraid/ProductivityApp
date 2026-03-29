@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import yaml from 'yaml';
 import { cn } from '@/lib/utils';
@@ -11,6 +12,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
 import { tags as t } from '@lezer/highlight';
 
 // ── Editor theme ──────────────────────────────────────────────────────────────
@@ -804,6 +806,230 @@ function InlineProperty({ propKey, propValue }: { propKey: string; propValue: st
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Live Markdown Editor - renders formatting in real-time with visible syntax
+// ═════════════════════════════════════════════════════════════════════════════
+
+function LiveMarkdownEditor({ content, onChange }: { content: string; onChange: (val: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [cursorPos, setCursorPos] = useState(0);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+    setCursorPos(e.target.selectionStart);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = textarea;
+
+    // Handle Tab key
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const newValue = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
+      onChange(newValue);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = selectionStart + 2;
+      }, 0);
+    }
+  };
+
+  // Render styled overlay with improved pattern matching
+  const renderStyledContent = () => {
+    const lines = content.split('\n');
+    
+    return lines.map((line, lineIdx) => {
+      // Handle headings first (# text)
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const sizes = ['text-3xl', 'text-2xl', 'text-xl', 'text-lg', 'text-base', 'text-sm'];
+        const weights = 'font-bold';
+        return (
+          <div key={lineIdx} className={`leading-relaxed ${sizes[level - 1]} ${weights} text-slate-900`}>
+            <span className="text-slate-400 font-normal">{headingMatch[1]} </span>
+            {renderInlineFormatting(headingMatch[2], lineIdx, 'heading')}
+          </div>
+        );
+      }
+
+      // Handle lists
+      const listMatch = line.match(/^(\s*)([-*+]|\d+\.)\s+(.+)/);
+      if (listMatch) {
+        const indent = listMatch[1].length;
+        const bullet = listMatch[2];
+        const text = listMatch[3];
+        return (
+          <div key={lineIdx} className="leading-relaxed" style={{ paddingLeft: `${indent * 12}px` }}>
+            <span className="text-slate-400">{bullet} </span>
+            {renderInlineFormatting(text, lineIdx, 'list')}
+          </div>
+        );
+      }
+
+      // Handle blockquotes
+      if (line.startsWith('>')) {
+        const quotedText = line.replace(/^>\s*/, '');
+        return (
+          <div key={lineIdx} className="leading-relaxed border-l-4 border-slate-300 pl-4 text-slate-600 italic">
+            <span className="text-slate-400">&gt; </span>
+            {renderInlineFormatting(quotedText, lineIdx, 'quote')}
+          </div>
+        );
+      }
+
+      // Handle horizontal rules
+      if (line.match(/^(---|\*\*\*|___)$/)) {
+        return (
+          <div key={lineIdx} className="py-2">
+            <hr className="border-t-2 border-slate-300" />
+          </div>
+        );
+      }
+
+      // Regular paragraph
+      if (line.trim() === '') {
+        return <div key={lineIdx} className="leading-relaxed">&nbsp;</div>;
+      }
+
+      return (
+        <div key={lineIdx} className="leading-relaxed">
+          {renderInlineFormatting(line, lineIdx, 'normal')}
+        </div>
+      );
+    });
+  };
+
+  // Render inline formatting (bold, italic, code, etc.)
+  const renderInlineFormatting = (text: string, lineIdx: number, context: string) => {
+    const parts: React.ReactNode[] = [];
+    let remaining = text;
+    let offset = 0;
+
+    // Process patterns in order of precedence
+    const patterns = [
+      // Inline code first (highest precedence)
+      { regex: /`([^`]+)`/g, render: (match: RegExpExecArray, idx: number) => (
+        <span key={`code-${lineIdx}-${idx}`} className="font-mono text-sm bg-slate-100 text-pink-600 px-1.5 py-0.5 rounded mx-0.5">
+          <span className="text-slate-400">`</span>{match[1]}<span className="text-slate-400">`</span>
+        </span>
+      )},
+      // Bold (** or __)
+      { regex: /(\*\*|__)(.+?)\1/g, render: (match: RegExpExecArray, idx: number) => (
+        <span key={`bold-${lineIdx}-${idx}`} className="font-bold text-slate-900">
+          <span className="text-slate-400 font-normal">{match[1]}</span>
+          {match[2]}
+          <span className="text-slate-400 font-normal">{match[1]}</span>
+        </span>
+      )},
+      // Italic (* or _)
+      { regex: /(?<!\*|\w)(\*|_)(?!\s)(.+?)(?<!\s)\1(?!\*|\w)/g, render: (match: RegExpExecArray, idx: number) => (
+        <span key={`italic-${lineIdx}-${idx}`} className="italic text-slate-700">
+          <span className="text-slate-400 not-italic">{match[1]}</span>
+          {match[2]}
+          <span className="text-slate-400 not-italic">{match[1]}</span>
+        </span>
+      )},
+      // Strikethrough (~~)
+      { regex: /~~(.+?)~~/g, render: (match: RegExpExecArray, idx: number) => (
+        <span key={`strike-${lineIdx}-${idx}`} className="line-through text-slate-500">
+          <span className="text-slate-400 no-underline">~~</span>
+          {match[1]}
+          <span className="text-slate-400 no-underline">~~</span>
+        </span>
+      )},
+      // Links [text](url)
+      { regex: /\[([^\]]+)\]\(([^)]+)\)/g, render: (match: RegExpExecArray, idx: number) => (
+        <span key={`link-${lineIdx}-${idx}`} className="text-blue-600 underline">
+          <span className="text-slate-400">[</span>
+          {match[1]}
+          <span className="text-slate-400">]({match[2]})</span>
+        </span>
+      )},
+    ];
+
+    const matches: Array<{ index: number; length: number; element: React.ReactNode }> = [];
+
+    // Find all matches
+    patterns.forEach(pattern => {
+      const regex = new RegExp(pattern.regex);
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          index: match.index,
+          length: match[0].length,
+          element: pattern.render(match, match.index)
+        });
+      }
+    });
+
+    // Sort matches by position
+    matches.sort((a, b) => a.index - b.index);
+
+    // Remove overlapping matches (keep first one)
+    const validMatches: typeof matches = [];
+    let lastEnd = 0;
+    matches.forEach(match => {
+      if (match.index >= lastEnd) {
+        validMatches.push(match);
+        lastEnd = match.index + match.length;
+      }
+    });
+
+    // Build final output
+    let currentPos = 0;
+    validMatches.forEach((match, idx) => {
+      // Add text before match
+      if (match.index > currentPos) {
+        parts.push(<span key={`text-${lineIdx}-${currentPos}`}>{text.substring(currentPos, match.index)}</span>);
+      }
+      // Add match
+      parts.push(match.element);
+      currentPos = match.index + match.length;
+    });
+
+    // Add remaining text
+    if (currentPos < text.length) {
+      parts.push(<span key={`text-${lineIdx}-${currentPos}`}>{text.substring(currentPos)}</span>);
+    }
+
+    return parts.length > 0 ? parts : <span>{text}</span>;
+  };
+
+  return (
+    <div className="relative w-full h-full min-h-[500px] font-serif">
+      {/* Styled overlay */}
+      <div className="absolute inset-0 px-8 py-6 pointer-events-none overflow-hidden text-slate-700 whitespace-pre-wrap break-words"
+        style={{ 
+          fontSize: '16px',
+          lineHeight: '1.75',
+          fontFamily: "'Georgia', 'Cambria', 'Times New Roman', serif"
+        }}>
+        {renderStyledContent()}
+      </div>
+
+      {/* Invisible textarea */}
+      <textarea
+        ref={textareaRef}
+        value={content}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
+        className="absolute inset-0 w-full h-full px-8 py-6 bg-transparent resize-none focus:outline-none font-serif caret-slate-900"
+        style={{
+          fontSize: '16px',
+          lineHeight: '1.75',
+          color: 'transparent',
+          caretColor: '#0f172a',
+          fontFamily: "'Georgia', 'Cambria', 'Times New Roman', serif"
+        }}
+        placeholder="Start typing... **bold** *italic* # Heading `code`"
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Main NoteEditor
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -816,6 +1042,7 @@ interface NoteEditorProps {
 
 export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteEditorProps) {
   const tasks = useAppStore(s => s.tasks);
+  const settings = useAppStore(s => s.settings);
 
   // Parse frontmatter
   let frontmatter: any = null;
@@ -846,6 +1073,35 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
   }, [content, onChange]);
 
   const handleCodeMirrorChange = useCallback((val: string) => { onChange(val); }, [onChange]);
+
+  // ── LIVE MARKDOWN MODE (Dynamic) ───────────────────────────────────────────
+  if (settings.markdownRenderMode === 'dynamic') {
+    return (
+      <div className="w-full h-full">
+        {frontmatter && Object.keys(frontmatter).length > 0 && (
+          <div className="px-8 pt-6 pb-4">
+            <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Properties</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {Object.entries(frontmatter).map(([key, value]) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 capitalize">{key.replace(/-/g, ' ')}</span>
+                    <FrontmatterValue propKey={key} value={value as string} onChange={(v) => updateFrontmatter(key, v)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        <LiveMarkdownEditor content={markdownContent} onChange={(newMd) => {
+          const newContent = frontmatter 
+            ? `---\n${yaml.stringify(frontmatter).trim()}\n---\n${newMd}`
+            : newMd;
+          onChange(newContent);
+        }} />
+      </div>
+    );
+  }
 
   // ── EDIT MODE ─────────────────────────────────────────────────────────────
   if (isEditing) {
@@ -879,6 +1135,8 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
   const processedMarkdown = markdownContent
     .replace(/\[\[([^\]]+)\]\]/g, (_, name) => `[${name}](internal://${encodeURIComponent(name)})`)
     .replace(/\[([a-zA-Z0-9_-]+)::([^\]]*)\]/g, (_, k, v) => `[${k}::${v}](prop://${encodeURIComponent(k)}/${encodeURIComponent(v)})`);
+
+  
 
   const GH = {
     fg: '#1f2328', fgMuted: '#636c76', border: '#d1d9e0', borderSub: '#d8dee4',
@@ -945,7 +1203,7 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
       {markdownContent.trim() ? (
         <div className="gh-md" ref={previewRef}>
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm,remarkBreaks]}
             components={{
               h1: ({children}) => <h1 style={s.h1}>{children}</h1>,
               h2: ({children}) => <h2 style={s.h2}>{children}</h2>,

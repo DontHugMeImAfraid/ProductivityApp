@@ -197,7 +197,7 @@ function QuickEditPopover({ event, onClose, onSave, onFullEdit, onDelete, style 
 
         {/* Actions */}
         <div className="flex gap-1.5 pt-1">
-          <button onClick={save} className="flex-1 py-1.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-700 transition-colors">Save</button>
+          <button onClick={save} className="flex-1 py-1.5 text-xs font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-700 transition-colors">Ssave</button>
           <button onClick={onFullEdit} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
             <Edit2 className="w-3.5 h-3.5" />
           </button>
@@ -211,14 +211,27 @@ function QuickEditPopover({ event, onClose, onSave, onFullEdit, onDelete, style 
 }
 
 // ─── Inline Day Creator ───────────────────────────────────────────────────────
-function InlineDayCreator({ date, onCommit, onCancel }: {
+function InlineDayCreator({ date, onCommit, onCancel, style}: {
   date: Date; onCommit: (title: string, date: Date) => void; onCancel: () => void;
 }) {
   const [val, setVal] = useState('');
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  useEffect(() => { 
+    console.log("Click")
+    ref.current?.focus(); }, []);
+  
   return (
-    <div className="mt-1 flex items-center gap-1" onClick={e => e.stopPropagation()}>
+  <div className="fixed z-[100] w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
+  style={style} onClick={
+    e =>{ 
+      console.log("Popout Click")
+      e.stopPropagation()
+    }
+    }>
+    <div className="mt-1 flex items-center gap-1" onClick={e => { 
+      // confirmation
+       e.stopPropagation()
+      }}>
       <input ref={ref} value={val} onChange={e => setVal(e.target.value)}
         onKeyDown={e => {
           if (e.key === 'Enter' && val.trim()) { onCommit(val.trim(), date); }
@@ -232,6 +245,7 @@ function InlineDayCreator({ date, onCommit, onCancel }: {
         <Check className="w-3 h-3" />
       </button>
     </div>
+  </div>
   );
 }
 
@@ -776,6 +790,31 @@ export function CalendarView() {
   const [showCmd,      setShowCmd]      = useState(false);
   const [contextDay,   setContextDay]   = useState<Date | null>(null);
   const [dragId,       setDragId]       = useState<string | null>(null);
+
+  // ── Pointer-based drag state (move + resize) ──────────────────────────────
+  type DragOp = {
+    type: 'move' | 'resize';
+    eventId: string;
+    /** px per minute for the active grid */
+    pxPerMin: number;
+    /** For move: y offset of pointer inside the event block at drag start */
+    grabOffsetPx: number;
+    /** Scrollable grid container so we can read scrollTop */
+    gridRef: React.RefObject<HTMLDivElement>;
+    /** Hour the grid starts at */
+    startHour: number;
+    /** Original times */
+    origStart: number;
+    origEnd: number;
+    /** Week-view day resolution */
+    dayWidth?: number;
+    gridLeft?: number;
+    weekDays?: Date[];
+  };
+  const activeDrag  = useRef<DragOp | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ id: string; startTime: number; endTime: number } | null>(null);
+  const dayGridRef  = useRef<HTMLDivElement>(null);
+  const weekGridRef = useRef<HTMLDivElement>(null);
   const [hoverEv,      setHoverEv]      = useState<{ event: RichEvent; x: number; y: number } | null>(null);
   const [quickEd,      setQuickEd]      = useState<{ event: RichEvent; x: number; y: number } | null>(null);
   const [inlineDay,    setInlineDay]    = useState<string | null>(null);
@@ -890,6 +929,100 @@ export function CalendarView() {
     const ns = setMinutes(setHours(td, h), getMinutes(ev.startTime)).getTime();
     updateEvent(dragId, { startTime: ns, endTime: ns + dur });
     setDragId(null);
+  };
+
+  // ── Pointer drag helpers ────────────────────────────────────────────────
+
+  const onPointerMoveGlobal = useCallback((e: PointerEvent) => {
+    const op = activeDrag.current;
+    if (!op) return;
+    e.preventDefault();
+
+    const grid = op.gridRef.current;
+    if (!grid) return;
+
+    // gridTop is the clientY of the very top of the scrollable content area.
+    // We recompute it live each frame so that scrolling mid-drag stays correct.
+    const wrapperRect = grid.getBoundingClientRect();
+    const gridTop = wrapperRect.top - grid.scrollTop;
+
+    if (op.type === 'move') {
+      const relY = e.clientY - gridTop - op.grabOffsetPx;
+      const minutesFromGridStart = relY / op.pxPerMin;
+      const snappedMin = Math.round(minutesFromGridStart / 15) * 15;
+      const dur = op.origEnd - op.origStart;
+
+      const gridEndMin = 15 * 60;
+      const clampedMin = Math.max(0, Math.min(gridEndMin - Math.round(dur / 60_000), snappedMin));
+
+      let targetDate = new Date(op.origStart);
+      targetDate.setHours(0, 0, 0, 0);
+
+      if (op.weekDays && op.dayWidth != null && op.gridLeft != null) {
+        const colIndex = Math.floor((e.clientX - op.gridLeft) / op.dayWidth);
+        const clamped  = Math.max(0, Math.min(op.weekDays.length - 1, colIndex));
+        targetDate = new Date(op.weekDays[clamped]);
+        targetDate.setHours(0, 0, 0, 0);
+      }
+
+      const newStart = targetDate.getTime() + (op.startHour * 60 + clampedMin) * 60_000;
+      if (isNaN(newStart)) return;
+      setDragPreview({ id: op.eventId, startTime: newStart, endTime: newStart + dur });
+
+    } else {
+      const relY = e.clientY - gridTop;
+      const minutesFromGridStart = relY / op.pxPerMin;
+      const snappedMin = Math.round(minutesFromGridStart / 15) * 15;
+
+      const base = new Date(op.origStart);
+      base.setHours(0, 0, 0, 0);
+      const newEndMs = base.getTime() + (op.startHour * 60 + snappedMin) * 60_000;
+      const clampedEnd = Math.max(op.origStart + 15 * 60_000, newEndMs);
+      if (isNaN(clampedEnd)) return;
+      setDragPreview({ id: op.eventId, startTime: op.origStart, endTime: clampedEnd });
+    }
+  }, []);
+
+  const onPointerUpGlobal = useCallback((e: PointerEvent) => {
+    const op = activeDrag.current;
+    if (!op) return;
+    activeDrag.current = null;
+    document.removeEventListener('pointermove', onPointerMoveGlobal);
+    document.removeEventListener('pointerup', onPointerUpGlobal);
+
+    setDragPreview(prev => {
+      if (prev && prev.id === op.eventId) {
+        updateEvent(op.eventId, { startTime: prev.startTime, endTime: prev.endTime });
+      }
+      return null;
+    });
+  }, [onPointerMoveGlobal, updateEvent]);
+
+  const startDrag = (
+    e: React.PointerEvent,
+    ev: RichEvent,
+    type: 'move' | 'resize',
+    gridRef: React.RefObject<HTMLDivElement>,
+    pxPerMin: number,
+    startHour: number,
+    grabOffsetPx: number,
+    weekPayload?: { days: Date[]; dayWidth: number; gridLeft: number }
+  ) => {
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    activeDrag.current = {
+      type,
+      eventId: ev.id,
+      pxPerMin,
+      grabOffsetPx,
+      gridRef,
+      startHour,
+      origStart: ev.startTime,
+      origEnd: ev.endTime,
+      ...(weekPayload ? { weekDays: weekPayload.days, dayWidth: weekPayload.dayWidth, gridLeft: weekPayload.gridLeft } : {}),
+    };
+    document.addEventListener('pointermove', onPointerMoveGlobal, { passive: false });
+    document.addEventListener('pointerup', onPointerUpGlobal);
   };
 
   // Smart scheduling handlers
@@ -1059,18 +1192,24 @@ export function CalendarView() {
 
   // ── Week View ─────────────────────────────────────────────────────────────
   const renderWeekView = () => {
-    const ws = startOfWeek(currentDate);
+    const HOUR_HEIGHT = 52; // px per hour (matches old min-h)
+    const START_HOUR  = 7;
+    const PX_PER_MIN  = HOUR_HEIGHT / 60;
+    const ws   = startOfWeek(currentDate);
     const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-    const hours = Array.from({ length: 15 }, (_, i) => i + 7);
+    const hours = Array.from({ length: 15 }, (_, i) => i + START_HOUR);
+    const totalHeight = hours.length * HOUR_HEIGHT;
+
     return (
-      <div className="flex-1 overflow-auto">
-        <div className="grid grid-cols-8 border-b border-zinc-200 bg-zinc-50 sticky top-0 z-10">
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Sticky day header */}
+        <div className="grid grid-cols-8 border-b border-zinc-200 bg-zinc-50 sticky top-0 z-10 shrink-0">
           <div className="border-r border-zinc-200 p-2 text-[10px] text-zinc-400 text-right font-black">UTC</div>
           {days.map(d => {
             const ec = wsEvs.filter(e => isSameDay(new Date(e.startTime), d)).length;
             return (
               <div key={d.toString()} onClick={() => { setCurrentDate(d); setCalView('day'); }}
-                className={cn('p-2 text-center border-r border-zinc-100 cursor-pointer hover:bg-indigo-50', isToday(d) && 'bg-indigo-50/80')}>
+                className={cn('p-2 text-center border-r border-zinc-100 cursor-pointer hover:bg-indigo-50 select-none', isToday(d) && 'bg-indigo-50/80')}>
                 <div className="text-[10px] text-zinc-500 uppercase font-black">{format(d, 'EEE')}</div>
                 <div className={cn('text-base font-black mx-auto w-8 h-8 flex items-center justify-center rounded-full mt-0.5',
                   isToday(d) ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'text-zinc-700 hover:bg-indigo-100')}>
@@ -1081,43 +1220,236 @@ export function CalendarView() {
             );
           })}
         </div>
-        {hours.map(hour => (
-          <div key={hour} className="grid grid-cols-8 border-b border-zinc-100 min-h-[52px]">
-            <div className="border-r border-zinc-200 px-2 py-1 text-[10px] text-zinc-400 text-right font-bold">{format(setHours(new Date(), hour), 'h a')}</div>
-            {days.map(d => {
-              const evs = filteredEvs.filter(e => isSameDay(new Date(e.startTime), d) && getHours(e.startTime) === hour);
+
+        {/* Scrollable grid */}
+        <div ref={weekGridRef} className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="grid grid-cols-8 relative" style={{ height: totalHeight }}>
+            {/* Hour labels */}
+            <div className="border-r border-zinc-200 relative col-span-1">
+              {hours.map(h => (
+                <div key={h} className="absolute w-full text-right px-2 text-[10px] text-zinc-400 font-black"
+                  style={{ top: (h - START_HOUR) * HOUR_HEIGHT - 7 }}>
+                  {format(setHours(new Date(), h), 'h a')}
+                </div>
+              ))}
+              {/* Horizontal hour lines on label column */}
+              {hours.map(h => (
+                <div key={`hl-${h}`} className="absolute left-0 right-0 border-b border-zinc-100"
+                  style={{ top: (h - START_HOUR) * HOUR_HEIGHT }} />
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {days.map((d, di) => {
+              const dayEvs = filteredEvs
+                .filter(e => isSameDay(new Date(e.startTime), d))
+                .sort((a, b) => a.startTime - b.startTime);
+
+              // Column layout (same algorithm as Day view)
+              type WLE = RichEvent & { col: number; totalCols: number };
+              const layoutEvs: WLE[] = dayEvs.map(e => ({ ...e, col: 0, totalCols: 1 }));
+              const assigned = new Array(layoutEvs.length).fill(false);
+              for (let i = 0; i < layoutEvs.length; i++) {
+                if (assigned[i]) continue;
+                const group: number[] = [i];
+                for (let j = i + 1; j < layoutEvs.length; j++) {
+                  if (group.some(gi => layoutEvs[gi].startTime < layoutEvs[j].endTime && layoutEvs[j].startTime < layoutEvs[gi].endTime))
+                    group.push(j);
+                }
+                const cols: number[] = [];
+                group.forEach(idx => {
+                  let col = 0;
+                  while (cols.some((c, ci) => c === col && group[ci] !== idx &&
+                    layoutEvs[group[ci]].startTime < layoutEvs[idx].endTime &&
+                    layoutEvs[idx].startTime < layoutEvs[group[ci]].endTime)) col++;
+                  layoutEvs[idx].col = col; cols.push(col); assigned[idx] = true;
+                });
+                const maxCol = Math.max(...group.map(gi => layoutEvs[gi].col)) + 1;
+                group.forEach(gi => { layoutEvs[gi].totalCols = maxCol; });
+              }
+
               return (
                 <div key={d.toString()}
-                  className={cn('border-r border-zinc-100 p-0.5 cursor-pointer hover:bg-zinc-50 group/cell', isToday(d) && 'bg-indigo-50/20')}
-                  onClick={() => openModal(setHours(d, hour))}
-                  onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e, d, hour)}>
-                  {evs.map(ev => (
-                    <div key={ev.id} draggable onDragStart={e => { e.stopPropagation(); onDragStart(e, ev); }}
-                      onClick={ee => { ee.stopPropagation(); const r = (ee.currentTarget as HTMLElement).getBoundingClientRect(); setQuickEd({ event: ev, x: Math.min(r.right + 4, window.innerWidth - 300), y: Math.min(r.top, window.innerHeight - 280) }); }}
-                      onMouseEnter={e => onEvEnter(e, ev)} onMouseLeave={onEvLeave}
-                      className="text-[10px] rounded-lg px-1.5 py-1 mb-0.5 truncate cursor-grab hover:opacity-90 font-bold"
-                      style={{ background: getCat(ev.category).color, color: '#fff' }}>
-                      {ev.title}
+                  className={cn('relative border-r border-zinc-100', isToday(d) && 'bg-indigo-50/20')}
+                  onClick={e => {
+                    if ((e.target as HTMLElement).closest('[data-event]')) return;
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    const relY = e.clientY - rect.top + (weekGridRef.current?.scrollTop ?? 0);
+                    const hour = START_HOUR + Math.floor(relY / HOUR_HEIGHT);
+                    const slotStart = setMinutes(setHours(d, hour), 0);
+                    openModal(slotStart, undefined, { startTime: slotStart.getTime(), endTime: slotStart.getTime() + 3600_000 });
+                  }}>
+                  {/* Hour grid lines */}
+                  {hours.map(h => (
+                    <div key={h} className="absolute left-0 right-0 border-b border-zinc-100 pointer-events-none"
+                      style={{ top: (h - START_HOUR) * HOUR_HEIGHT, height: HOUR_HEIGHT }}>
+                      <div className="absolute left-0 right-0 border-b border-zinc-100/50" style={{ top: HOUR_HEIGHT / 2 }} />
                     </div>
                   ))}
-                  <div className="opacity-0 group-hover/cell:opacity-100 transition-opacity text-[9px] text-indigo-400 pl-0.5">+</div>
+
+                  {/* Event blocks */}
+                  {layoutEvs.map(ev => {
+                    const preview = dragPreview?.id === ev.id ? dragPreview : null;
+                    const dispStart = new Date(preview ? preview.startTime : ev.startTime);
+                    const dispEnd   = new Date(preview ? preview.endTime   : ev.endTime);
+                    const cat = getCat(ev.category);
+                    const Icon = cat.icon;
+                    const dur = differenceInMinutes(dispEnd, dispStart);
+
+                    // For week view, show on correct day using preview startTime date
+                    if (preview && !isSameDay(dispStart, d)) {
+                      // This event is being dragged to another day — render ghost on that day
+                      return null;
+                    }
+
+                    const startMins = getHours(dispStart) * 60 + getMinutes(dispStart);
+                    const topPx = ((startMins - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                    const heightPx = Math.max((dur / 60) * HOUR_HEIGHT, 20);
+                    const colWidth = 100 / ev.totalCols;
+                    const isShort = heightPx < 32;
+                    const isDragging = preview !== null;
+
+                    return (
+                      <div key={ev.id} data-event="1"
+                        className={cn(
+                          'absolute z-10 rounded-lg overflow-hidden select-none transition-shadow',
+                          isDragging ? 'opacity-90 shadow-xl z-30 ring-2 ring-white' : 'hover:shadow-md hover:z-20 cursor-grab'
+                        )}
+                        style={{
+                          top: topPx + 1,
+                          height: heightPx - 2,
+                          left: `calc(${ev.col * colWidth}% + 2px)`,
+                          width: `calc(${colWidth}% - 4px)`,
+                          background: `${cat.color}18`,
+                          borderLeft: `3px solid ${cat.color}`,
+                        }}
+                        onPointerDown={e => {
+                          if (e.button !== 0) return;
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const localY = e.clientY - rect.top;
+                          const isResizeZone = localY >= rect.height - 8;
+                          if (isResizeZone) {
+                            startDrag(e, ev, 'resize', weekGridRef, PX_PER_MIN, START_HOUR, 0);
+                          } else {
+                            startDrag(e, ev, 'move', weekGridRef, PX_PER_MIN, START_HOUR, localY, {
+                              days,
+                              dayWidth: (weekGridRef.current?.getBoundingClientRect().width ?? 0) * (7 / 8),
+                              gridLeft: (weekGridRef.current?.getBoundingClientRect().left ?? 0) + (weekGridRef.current?.getBoundingClientRect().width ?? 0) / 8,
+                            });
+                          }
+                        }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (activeDrag.current) return;
+                          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setQuickEd({ event: ev, x: Math.min(r.right + 4, window.innerWidth - 300), y: Math.min(r.top, window.innerHeight - 280) });
+                        }}
+                        onMouseEnter={e => onEvEnter(e, ev)}
+                        onMouseLeave={onEvLeave}>
+                        <div className={cn('flex items-start gap-1 h-full px-1.5', isShort ? 'items-center py-0' : 'py-1')}>
+                          <div className="w-3.5 h-3.5 rounded flex items-center justify-center shrink-0" style={{ background: cat.color }}>
+                            <Icon className="w-2 h-2 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-black text-zinc-900 truncate leading-tight">{ev.title}</p>
+                            {!isShort && <p className="text-[9px] text-zinc-500 truncate">{format(dispStart, 'h:mm a')}</p>}
+                          </div>
+                        </div>
+                        {/* Resize handle */}
+                        <div className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize flex items-center justify-center group/rh">
+                          <div className="w-6 h-0.5 rounded-full bg-current opacity-0 group-hover/rh:opacity-30 transition-opacity" style={{ color: cat.color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Ghost for event being dragged INTO this day from another */}
+                  {dragPreview && (() => {
+                    const ev = wsEvs.find(x => x.id === dragPreview.id);
+                    if (!ev || isSameDay(new Date(ev.startTime), d)) return null; // handled above
+                    if (!isSameDay(new Date(dragPreview.startTime), d)) return null;
+                    const cat = getCat(ev.category);
+                    const Icon = cat.icon;
+                    const ghostStart = new Date(dragPreview.startTime);
+                    const ghostEnd   = new Date(dragPreview.endTime);
+                    const dur = differenceInMinutes(ghostEnd, ghostStart);
+                    const startMins = getHours(ghostStart) * 60 + getMinutes(ghostStart);
+                    const topPx = ((startMins - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                    const heightPx = Math.max((dur / 60) * HOUR_HEIGHT, 20);
+                    return (
+                      <div key="ghost" className="absolute z-30 rounded-lg overflow-hidden pointer-events-none opacity-80 ring-2 ring-white shadow-xl"
+                        style={{ top: topPx + 1, height: heightPx - 2, left: '2px', right: '2px', background: `${cat.color}25`, borderLeft: `3px solid ${cat.color}` }}>
+                        <div className="px-1.5 py-1 flex items-center gap-1">
+                          <div className="w-3.5 h-3.5 rounded flex items-center justify-center shrink-0" style={{ background: cat.color }}>
+                            <Icon className="w-2 h-2 text-white" />
+                          </div>
+                          <p className="text-[10px] font-black text-zinc-900 truncate">{ev.title}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
           </div>
-        ))}
+        </div>
       </div>
     );
   };
 
   // ── Day View ──────────────────────────────────────────────────────────────
   const renderDayView = () => {
-    const hours = Array.from({ length: 15 }, (_, i) => i + 7);
-    const dayEvs = filteredEvs.filter(e => isSameDay(new Date(e.startTime), currentDate)).sort((a, b) => a.startTime - b.startTime);
-    const dayConflicts = detectConflicts(dayEvs);
+    const HOUR_HEIGHT = 60; // px per hour
+    const START_HOUR = 7;
+    const PX_PER_MIN = HOUR_HEIGHT / 60;
+    const hours = Array.from({ length: 15 }, (_, i) => i + START_HOUR);
+    const dayEvs = filteredEvs
+      .filter(e => isSameDay(new Date(e.startTime), currentDate))
+      .sort((a, b) => a.startTime - b.startTime);
+
+    // ── Column layout for overlapping events ────────────────────────────────
+    type LayoutEvent = RichEvent & { col: number; totalCols: number };
+
+    const layoutEvs: LayoutEvent[] = dayEvs.map(e => ({ ...e, col: 0, totalCols: 1 }));
+
+    // Build groups of overlapping events
+    const assigned: boolean[] = new Array(layoutEvs.length).fill(false);
+    for (let i = 0; i < layoutEvs.length; i++) {
+      if (assigned[i]) continue;
+      const group: number[] = [i];
+      for (let j = i + 1; j < layoutEvs.length; j++) {
+        const overlaps = group.some(gi =>
+          layoutEvs[gi].startTime < layoutEvs[j].endTime &&
+          layoutEvs[j].startTime < layoutEvs[gi].endTime
+        );
+        if (overlaps) group.push(j);
+      }
+      const cols: number[] = [];
+      group.forEach(idx => {
+        let col = 0;
+        while (cols.some((c, ci) =>
+          c === col && group[ci] !== idx &&
+          layoutEvs[group[ci]].startTime < layoutEvs[idx].endTime &&
+          layoutEvs[idx].startTime < layoutEvs[group[ci]].endTime
+        )) col++;
+        layoutEvs[idx].col = col;
+        cols.push(col);
+        assigned[idx] = true;
+      });
+      const maxCol = Math.max(...group.map(gi => layoutEvs[gi].col)) + 1;
+      group.forEach(gi => { layoutEvs[gi].totalCols = maxCol; });
+    }
+
+    // Current-time indicator position
+    const now = new Date();
+    const isCurDay = isToday(currentDate);
+    const nowMinutes = getHours(now) * 60 + getMinutes(now);
+    const nowTop = ((nowMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+
     return (
-      <div className="flex-1 overflow-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-50 sticky top-0 z-10">
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Day header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-50 sticky top-0 z-10 shrink-0">
           <div className="flex items-center gap-3">
             <div className={cn('w-10 h-10 rounded-full flex items-center justify-center text-sm font-black',
               isToday(currentDate) ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white border border-zinc-200 text-zinc-700')}>
@@ -1130,50 +1462,144 @@ export function CalendarView() {
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="text-zinc-500">{dayEvs.length} event{dayEvs.length !== 1 ? 's' : ''}</span>
-            {dayConflicts.size > 0 && <span className="flex items-center gap-1 text-red-500 font-black"><AlertTriangle className="w-3 h-3" />{dayConflicts.size} conflict{dayConflicts.size > 1 ? 's' : ''}</span>}
           </div>
         </div>
-        {hours.map(hour => {
-          const evs = dayEvs.filter(e => getHours(e.startTime) === hour);
-          const isCur = isToday(currentDate) && getHours(new Date()) === hour;
-          return (
-            <div key={hour}
-              className={cn('flex border-b border-zinc-100 min-h-[60px] group/hour', isCur ? 'bg-indigo-50/50' : 'hover:bg-zinc-50/50 cursor-pointer transition-colors')}
-              onClick={() => openModal(setHours(currentDate, hour))}>
-              <div className="w-16 shrink-0 px-3 py-2 text-[10px] text-zinc-400 text-right border-r border-zinc-200 font-black relative">
-                {format(setHours(new Date(), hour), 'h a')}
-                {isCur && <div className="absolute right-0 top-1/2 w-2 h-2 bg-indigo-500 rounded-full -mr-1 shadow-lg" />}
-              </div>
-              <div className="flex-1 p-1.5 space-y-1">
-                {evs.map(ev => {
-                  const cat = getCat(ev.category); const Icon = cat.icon;
-                  const dur = differenceInMinutes(ev.endTime, ev.startTime);
-                  const isConflict = dayConflicts.has(ev.id);
-                  return (
-                    <div key={ev.id} draggable onDragStart={e => onDragStart(e, ev)}
-                      onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setQuickEd({ event: ev, x: Math.min(r.right + 4, window.innerWidth - 300), y: Math.min(r.top, window.innerHeight - 280) }); }}
-                      onMouseEnter={e => onEvEnter(e, ev)} onMouseLeave={onEvLeave}
-                      className={cn('px-3 py-2 rounded-xl cursor-grab hover:shadow-md transition-all', isConflict && 'ring-2 ring-red-400')}
-                      style={{ background: `${cat.color}12`, borderLeft: `3px solid ${cat.color}` }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: cat.color }}>
-                          <Icon className="w-3 h-3 text-white" />
-                        </div>
-                        <p className="text-xs font-black text-zinc-900">{ev.title}</p>
-                        {isConflict && <AlertTriangle className="w-3 h-3 text-red-400 ml-auto shrink-0" />}
-                      </div>
-                      <p className="text-[10px] text-zinc-500 mt-0.5 ml-7">
-                        {format(ev.startTime, 'h:mm a')} – {format(ev.endTime, 'h:mm a')} · {fmtDur(dur)}
-                        {isConflict && <span className="ml-2 text-red-400 font-black">⚠ conflict</span>}
-                      </p>
-                    </div>
-                  );
-                })}
-                {evs.length === 0 && <div className="opacity-0 group-hover/hour:opacity-100 transition-opacity"><span className="text-[10px] text-indigo-400 pl-1">+ Add event</span></div>}
-              </div>
+
+        {/* Scrollable time grid */}
+        <div ref={dayGridRef} className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="relative flex" style={{ height: hours.length * HOUR_HEIGHT }}>
+            {/* Hour labels column */}
+            <div className="w-16 shrink-0 border-r border-zinc-200 relative">
+              {hours.map(hour => (
+                <div key={hour}
+                  className="absolute w-full px-3 text-[10px] text-zinc-400 text-right font-black pointer-events-none"
+                  style={{ top: (hour - START_HOUR) * HOUR_HEIGHT - 7 }}>
+                  {format(setHours(new Date(), hour), 'h a')}
+                </div>
+              ))}
             </div>
-          );
-        })}
+
+            {/* Events + click-to-create area */}
+            <div className="flex-1 relative">
+              {/* Hour grid lines + click targets */}
+              {hours.map(hour => {
+                const isCurHour = isCurDay && getHours(now) === hour;
+                return (
+                  <div key={hour}
+                    className={cn(
+                      'absolute left-0 right-0 border-b border-zinc-100 group/hour cursor-pointer transition-colors',
+                      isCurHour ? 'bg-indigo-50/40' : 'hover:bg-indigo-50/30'
+                    )}
+                    style={{ top: (hour - START_HOUR) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                    onClick={e => {
+                      if ((e.target as HTMLElement).closest('[data-event]')) return;
+                      const slotStart = setMinutes(setHours(currentDate, hour), 0);
+                      const slotEnd   = setMinutes(setHours(currentDate, hour + 1), 0);
+                      openModal(slotStart, undefined, {
+                        startTime: slotStart.getTime(),
+                        endTime:   slotEnd.getTime(),
+                      });
+                    }}>
+                    <span className="opacity-0 group-hover/hour:opacity-100 transition-opacity text-[10px] text-indigo-400 pl-2 leading-none absolute top-1 left-0 pointer-events-none">
+                      + Add event
+                    </span>
+                    <div className="absolute left-0 right-0 border-b border-zinc-100/60 pointer-events-none" style={{ top: HOUR_HEIGHT / 2 }} />
+                  </div>
+                );
+              })}
+
+              {/* Current time indicator */}
+              {isCurDay && nowTop >= 0 && nowTop <= hours.length * HOUR_HEIGHT && (
+                <div className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
+                  style={{ top: nowTop }}>
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 -ml-1 shadow-md shadow-indigo-300" />
+                  <div className="flex-1 h-px bg-indigo-400" />
+                </div>
+              )}
+
+              {/* Event blocks */}
+              {layoutEvs.map(ev => {
+                const preview = dragPreview?.id === ev.id ? dragPreview : null;
+                const dispStartMs = preview ? preview.startTime : ev.startTime;
+                const dispEndMs   = preview ? preview.endTime   : ev.endTime;
+                // Always use Date objects for date-fns — bare ms numbers cause RangeError
+                const dispStart = new Date(dispStartMs);
+                const dispEnd   = new Date(dispEndMs);
+
+                const cat = getCat(ev.category);
+                const Icon = cat.icon;
+                const dur = differenceInMinutes(dispEnd, dispStart);
+                const startMins = getHours(dispStart) * 60 + getMinutes(dispStart);
+                const topPx    = ((startMins - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                const heightPx = Math.max((dur / 60) * HOUR_HEIGHT, 22);
+
+                const colWidth  = 100 / ev.totalCols;
+                const leftPct   = ev.col * colWidth;
+                const widthPct  = colWidth - (ev.totalCols > 1 ? 0.5 : 0);
+                const isShort   = heightPx < 40;
+                const isDragging = preview !== null;
+
+                return (
+                  <div key={ev.id} data-event="1"
+                    className={cn(
+                      'absolute z-10 rounded-xl overflow-hidden select-none transition-shadow',
+                      isDragging ? 'opacity-90 shadow-2xl z-30 ring-2 ring-white/80' : 'hover:shadow-lg hover:z-20 cursor-grab'
+                    )}
+                    style={{
+                      top:    topPx + 1,
+                      height: heightPx - 2,
+                      left:   `calc(${leftPct}% + 4px)`,
+                      width:  `calc(${widthPct}% - 4px)`,
+                      background: `${cat.color}15`,
+                      borderLeft: `3px solid ${cat.color}`,
+                    }}
+                    onPointerDown={e => {
+                      if (e.button !== 0) return;
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const localY = e.clientY - rect.top;
+                      const isResizeZone = localY >= rect.height - 10;
+                      if (isResizeZone) {
+                        startDrag(e, ev, 'resize', dayGridRef, PX_PER_MIN, START_HOUR, 0);
+                      } else {
+                        startDrag(e, ev, 'move', dayGridRef, PX_PER_MIN, START_HOUR, localY);
+                      }
+                    }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (activeDrag.current) return;
+                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setQuickEd({ event: ev, x: Math.min(r.right + 4, window.innerWidth - 300), y: Math.min(r.top, window.innerHeight - 280) });
+                    }}
+                    onMouseEnter={e => onEvEnter(e, ev)}
+                    onMouseLeave={onEvLeave}>
+
+                    <div className={cn('flex items-start gap-1.5 h-full', isShort ? 'px-2 items-center' : 'px-2 py-1.5')}>
+                      <div className="w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-px"
+                        style={{ background: cat.color }}>
+                        <Icon className="w-2.5 h-2.5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-black text-zinc-900 leading-tight truncate">{ev.title}</p>
+                        {!isShort && (
+                          <p className="text-[9px] text-zinc-500 mt-0.5 leading-tight">
+                            {format(dispStart, 'h:mm a')} – {format(dispEnd, 'h:mm a')} · {fmtDur(dur)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Resize handle — bottom 10px strip */}
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-2.5 cursor-s-resize flex items-end justify-center pb-0.5 group/rh"
+                      onPointerDown={e => { e.stopPropagation(); startDrag(e, ev, 'resize', dayGridRef, PX_PER_MIN, START_HOUR, 0); }}>
+                      <div className="w-8 h-0.5 rounded-full opacity-0 group-hover/rh:opacity-40 transition-opacity" style={{ background: cat.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1206,10 +1632,10 @@ export function CalendarView() {
           onClick={() => setShowSidebar(false)}
         />
       )}
-
-      {/* Sidebar */}
+      {/* Left Sidebar */}
+      
       <div className={cn(
-        "w-52 shrink-0 border-r border-zinc-200 flex flex-col overflow-hidden bg-white transition-transform duration-300 ease-in-out",
+        "w-50 shrink-0 border-r border-zinc-00 flex flex-col overflow-hidden bg-white transition-transform duration-300 ease-in-out",
         "md:relative md:translate-x-0",
         "fixed inset-y-0 left-0 z-40",
         showSidebar ? "translate-x-0" : "-translate-x-full"
@@ -1395,7 +1821,7 @@ export function CalendarView() {
                 {wsEvs.filter(e => isSameDay(new Date(e.startTime), contextDay)).length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-xs text-zinc-400 mb-2">Nothing scheduled</p>
-                    <button onClick={() => openModal(contextDay)} className="text-xs text-indigo-500 font-black hover:text-indigo-700">+ Add event</button>
+                    <button onClick={() => openModal(contextDay)} className="text-xs text-indigo-500 font-black hover:text-indigo-700">++ Add event</button>
                   </div>
                 )}
               </div>
