@@ -1,19 +1,109 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import yaml from 'yaml';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store';
-import { Check, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
+import { Check, ChevronDown, Calendar as CalendarIcon, IndentIncrease } from 'lucide-react';
 
 // ── CodeMirror imports ────────────────────────────────────────────────────────
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { tags as t } from '@lezer/highlight';
+import { StateEffect, StateField } from '@codemirror/state';
+
+// ── Mobile gesture detection ─────────────────────────────────────────────────
+const useSwipeGesture = (onSwipeRight: () => void, threshold = 50) => {
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartX.current;
+    const deltaY = Math.abs(touchEndY - touchStartY.current);
+
+    // Swipe right detected (horizontal movement > threshold, minimal vertical movement)
+    if (deltaX > threshold && deltaY < threshold) {
+      onSwipeRight();
+    }
+  }, [onSwipeRight, threshold]);
+
+  return { handleTouchStart, handleTouchEnd };
+};
+
+// ── Auto bullet point extension ──────────────────────────────────────────────
+const autoBulletExtension = EditorView.domEventHandlers({
+  keydown(event, view) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      const { state } = view;
+      const { from } = state.selection.main;
+      const line = state.doc.lineAt(from);
+      const lineText = line.text;
+
+      // Check if current line starts with a bullet point
+      const bulletMatch = lineText.match(/^(\s*)([-*+])\s/);
+      if (bulletMatch) {
+        const [fullMatch, indent, bullet] = bulletMatch;
+        
+        // If line only has the bullet (no content), remove it and exit list
+        if (lineText.trim() === bullet) {
+          event.preventDefault();
+          view.dispatch({
+            changes: { from: line.from, to: line.to, insert: '' },
+            selection: { anchor: line.from }
+          });
+          return true;
+        }
+
+        // Insert new line with same indentation and bullet
+        event.preventDefault();
+        const insert = `\n${indent}${bullet} `;
+        view.dispatch({
+          changes: { from, to: from, insert },
+          selection: { anchor: from + insert.length }
+        });
+        return true;
+      }
+
+      // Check for numbered lists
+      const numberedMatch = lineText.match(/^(\s*)(\d+)\.\s/);
+      if (numberedMatch) {
+        const [fullMatch, indent, number] = numberedMatch;
+        
+        // If line only has the number (no content), remove it and exit list
+        if (lineText.trim() === `${number}.`) {
+          event.preventDefault();
+          view.dispatch({
+            changes: { from: line.from, to: line.to, insert: '' },
+            selection: { anchor: line.from }
+          });
+          return true;
+        }
+
+        // Insert new line with incremented number
+        event.preventDefault();
+        const nextNumber = parseInt(number) + 1;
+        const insert = `\n${indent}${nextNumber}. `;
+        view.dispatch({
+          changes: { from, to: from, insert },
+          selection: { anchor: from + insert.length }
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+});
 
 // ── Editor theme ──────────────────────────────────────────────────────────────
 const editorTheme = EditorView.theme({
@@ -61,6 +151,7 @@ const editorExtensions = [
   editorTheme,
   syntaxHighlighting(markdownHighlighting),
   EditorView.lineWrapping,
+  autoBulletExtension, // Add auto bullet point functionality
 ];
 
 const editorSetup = {
@@ -1038,11 +1129,104 @@ interface NoteEditorProps {
   onChange: (content: string) => void;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
+  onSwipeOpenExplorer?: () => void;
+  onSwipeOpenMenu?: () => void;
 }
 
-export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteEditorProps) {
+export function NoteEditor({ content, onChange, isEditing, setIsEditing, onSwipeOpenExplorer, onSwipeOpenMenu }: NoteEditorProps) {
   const tasks = useAppStore(s => s.tasks);
   const settings = useAppStore(s => s.settings);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<any>(null);
+  const [swipeCount, setSwipeCount] = useState(0);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Swipe gesture handling
+  const { handleTouchStart, handleTouchEnd } = useSwipeGesture(() => {
+    if (swipeCount === 0 && onSwipeOpenExplorer) {
+      onSwipeOpenExplorer();
+      setSwipeCount(1);
+      // Reset after 3 seconds
+      setTimeout(() => setSwipeCount(0), 3000);
+    } else if (swipeCount === 1 && onSwipeOpenMenu) {
+      onSwipeOpenMenu();
+      setSwipeCount(0);
+    }
+  });
+
+  // Setup touch listeners for swipe gestures
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('touchstart', handleTouchStart);
+      container.addEventListener('touchend', handleTouchEnd);
+      return () => {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [handleTouchStart, handleTouchEnd]);
+
+  // Auto-focus when entering edit mode
+  useEffect(() => {
+    if (isEditing && editorRef.current) {
+      setTimeout(() => {
+        editorRef.current?.view?.focus();
+      }, 100);
+    }
+  }, [isEditing]);
+
+  // Tap preview to enter edit mode (mobile friendly)
+  const handlePreviewClick = useCallback(() => {
+    if (!isEditing) {
+      setIsEditing(true);
+    }
+  }, [isEditing, setIsEditing]);
+
+  // Indent selected lines function
+  const handleIndent = useCallback(() => {
+    if (editorRef.current && isEditing) {
+      const view = editorRef.current.view;
+      if (!view) return;
+
+      const { state } = view;
+      const { from, to } = state.selection.main;
+      
+      // Get all lines in selection
+      const startLine = state.doc.lineAt(from);
+      const endLine = state.doc.lineAt(to);
+      
+      const changes = [];
+      for (let pos = startLine.from; pos <= endLine.from; pos = state.doc.lineAt(pos).to + 1) {
+        const line = state.doc.lineAt(pos);
+        changes.push({
+          from: line.from,
+          to: line.from,
+          insert: '  ' // Add 2 spaces for indentation
+        });
+        if (pos >= endLine.from) break;
+      }
+
+      view.dispatch({
+        changes,
+        selection: { anchor: from + 2, head: to + (changes.length * 2) }
+      });
+    }
+  }, [isEditing]);
+
+  // Remove line breaks from headers when processing content
+  const processContentForSave = useCallback((rawContent: string) => {
+    return rawContent.replace(/^(#{1,6})\s+(.+?)(\n\n+)/gm, (match, hashes, title, newlines) => {
+      // Remove extra newlines after headers, keep only one
+      return `${hashes} ${title}\n`;
+    });
+  }, []);
+
+  const handleCodeMirrorChange = useCallback((val: string) => { 
+    const processed = processContentForSave(val);
+    onChange(processed); 
+  }, [onChange, processContentForSave]);
 
   // Parse frontmatter
   let frontmatter: any = null;
@@ -1071,8 +1255,6 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
       return result;
     }));
   }, [content, onChange]);
-
-  const handleCodeMirrorChange = useCallback((val: string) => { onChange(val); }, [onChange]);
 
   // ── LIVE MARKDOWN MODE (Dynamic) ───────────────────────────────────────────
   if (settings.markdownRenderMode === 'dynamic') {
@@ -1106,7 +1288,7 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
   // ── EDIT MODE ─────────────────────────────────────────────────────────────
   if (isEditing) {
     return (
-      <div className="w-full h-full min-h-[500px] rounded-xl overflow-hidden">
+      <div ref={containerRef} className="w-full h-full min-h-[500px] rounded-xl overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-2 bg-[#1e2130] border-b border-white/5">
           <div className="flex gap-2">
             {(['H1','B','I','`','—'] as const).map(label => (
@@ -1116,9 +1298,17 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
               </button>
             ))}
           </div>
-          <span className="ml-auto text-[10px] text-[#4a4f60] font-mono select-none">markdown · codemirror 6</span>
+          <button
+            onClick={handleIndent}
+            className="ml-auto p-1.5 text-[#7a7f94] hover:text-[#e0e2e8] rounded transition-colors"
+            title="Indent selected lines (add indentation)"
+          >
+            <IndentIncrease className="w-4 h-4" />
+          </button>
+          <span className="text-[10px] text-[#4a4f60] font-mono select-none">markdown · codemirror 6</span>
         </div>
         <CodeMirror
+          ref={editorRef}
           value={content}
           onChange={handleCodeMirrorChange}
           extensions={editorExtensions}
@@ -1174,7 +1364,7 @@ export function NoteEditor({ content, onChange, isEditing, setIsEditing }: NoteE
   };
 
   return (
-    <div className="max-w-[800px] mx-auto w-full pb-32" style={s.body}>
+    <div ref={containerRef} className="max-w-[800px] mx-auto w-full pb-32 cursor-text" style={s.body} onClick={handlePreviewClick}>
       <style>{`
         .gh-md table tr:nth-child(2n) td { background-color: #f6f8fa; }
         .gh-md a:hover { text-decoration: underline; }

@@ -52,9 +52,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   CognitoUser,
   CognitoUserSession,
+  
 } from 'amazon-cognito-identity-js';
 import { userPool, useAuth } from '@/contexts/AuthContext';
-
+import { AuthenticationDetails } from 'amazon-cognito-identity-js';
 // ─── Shared primitives (already in AuthPage — import from there instead) ──────
 // Copied here for standalone reference only.
 
@@ -488,7 +489,7 @@ export function SetPasswordView({
           setLoading(false);
           setSuccess('Password updated! Signing you in…');
           // Auto sign-in with the new password
-          const { AuthenticationDetails } = require('amazon-cognito-identity-js');
+          
           const authDetails = new AuthenticationDetails({ Username: localEmail.trim(), Password: password });
           user.authenticateUser(authDetails, {
             onSuccess: (session: CognitoUserSession) => {

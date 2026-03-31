@@ -12,7 +12,7 @@ import {
   CheckSquare, Zap, Pin, Clock, Hash,
   Layout, BookOpen, Users, DollarSign, Lightbulb,
   Sparkles, PanelRight, PanelRightClose,
-  SplitSquareHorizontal, SplitSquareVertical, GripVertical,
+  SplitSquareHorizontal, SplitSquareVertical, Share, GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -20,6 +20,10 @@ import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { NoteEditor } from '@/components/NoteEditor';
 import { useTheme } from '@/contexts/ThemeSystem';
+import { IndentIncrease } from 'lucide-react';
+import { keymap } from '@codemirror/view';
+import { StateEffect, StateField } from '@codemirror/state';
+
 
 // ─── Layout types ─────────────────────────────────────────────────────────────
 
@@ -726,7 +730,7 @@ function PaneEditor({ pane, notes, sections, tasks, isActive, pinnedIds, showCon
             />
           ) : (
             <div className="note-preview-area p-5 md:p-9 min-h-full shadow-sm" style={{ background: theme.colors.cardBg }}>
-              <NoteEditor content={note.content} isEditing={false} setIsEditing={setIsEditing}
+                 <NoteEditor content={note.content} isEditing={false} setIsEditing={setIsEditing}
                 onChange={content => {
                   console.log("Note Change")
                   updateNote(note.id, { content }); dispatch({ type: 'MARK_DIRTY', noteId: note.id
@@ -972,6 +976,9 @@ export function Notes() {
   const [showQuickCapture,  setShowQuickCapture]  = useState(false);
   const [showDashboard,     setShowDashboard]     = useState(false);
   const [showSidebar,       setShowSidebar]       = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showMobileMenu,    setShowMobileMenu]    = useState(false);
+
 
   const workspaceNotes    = useMemo(() => notes.filter(n => n.workspace === workspace), [notes, workspace]);
   const workspaceSections = useMemo(() => noteSections.filter(s => s.workspace === workspace), [noteSections, workspace]);
@@ -1215,6 +1222,105 @@ export function Notes() {
         >
           <FileText className="w-6 h-6" />
         </button>
+
+        {/* Mobile sidebar for file explorer */}
+        {showMobileSidebar && (
+          <div 
+            className="fixed inset-0 z-50 lg:hidden"
+            onClick={() => setShowMobileSidebar(false)}
+          >
+            <div 
+              className="absolute inset-y-0 left-0 w-80 bg-white shadow-xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Your file explorer content here */}
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold">Notes</h2>
+                  <button 
+                    onClick={() => setShowMobileSidebar(false)}
+                    className="p-2 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                {/* Render your notes list/sections here */}
+                {workspaceNotes.map(note => (
+                  <button
+                    key={note.id}
+                    onClick={() => {
+                      openNote(note.id);
+                      setShowMobileSidebar(false);
+                    }}
+                    className="w-full text-left p-3 hover:bg-gray-50 rounded"
+                  >
+                    {note.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Mobile context menu */}
+        {showMobileMenu && (
+          <div 
+            className="fixed inset-0 z-50 lg:hidden"
+            onClick={() => setShowMobileMenu(false)}
+          >
+            <div 
+              className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6" />
+                
+                {/* Menu actions */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      setIsEditing(true);
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-lg"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                    <span>Edit Note</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      // Delete logic
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 hover:bg-red-50 rounded-lg text-red-600"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    <span>Delete Note</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      // Share logic
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-lg"
+                  >
+                    <Share className="w-5 h-5" />
+                    <span>Share Note</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Mobile backdrop */}
+        {showMobileSidebar && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setShowMobileSidebar(false)}
+          />
+        )}
 
         {/* Mobile overlay */}
         {showSidebar && (
